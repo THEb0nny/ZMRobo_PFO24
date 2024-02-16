@@ -36,10 +36,8 @@ def convBinary2DecimalCode(binArr):
     decimalNumArr = [] # Переменная для хранения результата
     for k in range(4):
         decimalNum = 0
-        j = 1
-        for i in range(2):
+        for i, j in range(0, 2), range(1, -1, -1):
             decimal_num += bin_arr[k][i] * 2 ** j
-            j -= 1
         decimalNumArr[k] = decimalNum
 
     return decimalNumArr # Вернуть массив чисел
