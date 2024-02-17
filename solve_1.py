@@ -11,6 +11,8 @@ WHITE_REF_RAW_LS4 = 3041
 
 REF_VAL_LS_TRESHOLD = 40
 
+MOT2_ENC_RANGE = 300 # Тиков энкодера от края до края для мотора для горизонтальной перемещении каретки
+
 barcode_bin_array = [[1, 0], [0, 1], [1, 1], [0, 1]]
 
 def pauseUntilMotorStalled(motorPort, timeout=10):
@@ -95,23 +97,67 @@ def readBarCode():
         if i < 3:
             pass
             #DistMove(25, 20) # Движение на следующий участок для считывания
+        
+def current_milli_time():
+    return round(time.time() * 1000)
+
+def robotMove(lenght, speed):
+    Kp = 0.6
+
+    while True:
+        em1 = rcu.GetMotorCode(1)
+        em4 = rcu.GetMotorCode(4)
+        if (em1 + em4) / 2 >= lenght:
+            break
+        error_left = em4 - em1
+        error_right = em1 - em4
+        m1_speed = speed + error_left * Kp
+        m4_speed = speed + error_right * Kp
+        rcu.SetMotor(1, m1_speed)
+        rcu.SetMotor(4, m4_speed)
+        #rcu.SetWaitForTime(0.01)
+
+    Kp = 0.8
+    ENC_ERR_TRESHOLD = 10
+
+    dereg_time = 200
+    deregulation = False
+    while True:
+        current_time = current_milli_time()
+        rcu.SetLCDFilledRectangle2(35, 180, 100, 15, 0x0000)
+        rcu.SetDisplayStringXY(1, 180, "ct: " + str(current_time), 0xFFE0, 0x0000, 0)
+        em1 = rcu.GetMotorCode(1)
+        em4 = rcu.GetMotorCode(4)
+        error_left = lenght - em1
+        error_right = lenght - em4
+        if not(deregulation) and abs(error_left) <= ENC_ERR_TRESHOLD and abs(error_right) <= ENC_ERR_TRESHOLD:
+            deregulation = True
+            dereg_time += current_milli_time()
+            rcu.SetLCDFilledRectangle2(35, 200, 100, 15, 0x0000)
+            rcu.SetDisplayStringXY(1, 200, "dst: " + str(dereg_time), 0xFFE0, 0x0000, 0)
+        if deregulation and current_milli_time() >= dereg_time:
+            break
+        m1_speed = error_left * Kp
+        m4_speed = error_right * Kp
+        m1_speed = mymath.constrain(m1_speed, -30, 30)
+        m4_speed = mymath.constrain(m4_speed, -30, 30)
+        rcu.SetMotor(1, m1_speed)
+        rcu.SetMotor(4, m4_speed)
+        #rcu.SetWaitForTime(0.01)
+    
+    rcu.SetMotor(1, 0)
+    rcu.SetMotor(4, 0)
 
 # Функция решения задачи
 def solve():
-    rcu.SetMotor(2, -30)
+    rcu.SetMotor(2, -40)
     pauseUntilMotorStalled(2, 1)
-    rcu.SetWaitForTime(0.5)
+    rcu.SetWaitForTime(0.01)
     rcu.SetMotor(2, 0)
-    rcu.SetMotorStraight(1, 4, 20)
-    while rcu.GetMotorCode(1) < 360 and rcu.GetMotorCode(4) < 360:
-        pass
-    rcu.SetMotor(1, 0)
-    rcu.SetMotor(4, 0)
+    rcu.SetMotorCode(2)
+    #rcu.SetMotorStraight(1, 4, 20)
     #rcu.SetMotorStraightAngle(1, 4, 20, 360)
-    #rcu.SetWaitForAngle(1, 20, 360)
-    #rcu.SetWaitForAngle(4, 20, 360)
-    #rcu.SetMotor(1, 0)
-    #rcu.SetMotor(4, 0)
+    #robotMove(360, 30)
 
     #readBarCode()
 
@@ -121,7 +167,6 @@ def solve():
 
 # Главная функция
 def main():
-    #solve()
     thread.start_new_thread(telemetry,())
     thread.start_new_thread(solve,())
 
