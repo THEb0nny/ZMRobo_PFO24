@@ -33,20 +33,20 @@ class PIDController():
         self.kd = kd
         self.b = b
 
-    def setControlSaturation(low, high):
+    def setControlSaturation(self, low, high):
         self.ulow = low
         self.uhigh = high
 
-    def setDerivativeFilter(N):
-        self.N = mymath.constrain(N, 2, 20)
+    def setDerivativeFilter(self, N):
+        self.N = mymath.constrain(self, N, 2, 20)
 
-    def setPoint(ysp):
+    def setPoint(self, ysp):
         self.ysp = ysp
     
-    def compute(timestep, y):
+    def compute(self, timestep, y):
         h = timestep / 1000.0
         K = self.Kp
-        e = self.ysp - y
+        #e = self.ysp - y
 
         P = K * (self.b * self.ysp - y)
 
@@ -58,7 +58,7 @@ class PIDController():
 
         v = P + self.I + self.D
 
-        u = mymath.constrain(v, self.ulow, self/uhigh) if self.ulow < self.uhigh else v
+        u = mymath.constrain(v, self.ulow, self.uhigh) if self.ulow < self.uhigh else v
 
         if self.ki:
             Ti = K / self.ki
