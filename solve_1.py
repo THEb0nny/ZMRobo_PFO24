@@ -13,17 +13,19 @@ MOTOR_STRAIGHT_TIME_OUT = 1000
 CHASSIS_LEFT_MOT_PORT = 2 # Разъём левого мотора в шасси
 CHASSIS_RIGHT_MOT_PORT = 3 # Разъём правого мотора в шасси
 PEN_MANIP_LINEAR_MOTOR_PORT = 1 # Разъём мотора линейного перемещения в манипуляторе маркера
-LED_PORT = 5
+PEN_MANIP_MOTOR_PORT = 4 # Разъём мотора с маркером
+LED_PORT = 5 # Порт модуля лампы
+LEFT_LS_PORT = 2 # Левый датчик отражения
+RIGHT_LS_PORT = 3 # Правый датчик отпражения
 
 BLACK_REF_RAW_LS1 = 5125
 BLACK_REF_RAW_LS4 = 5185
-
 WHITE_REF_RAW_LS1 = 2930
 WHITE_REF_RAW_LS4 = 3041
 
-REF_VAL_LS_TRESHOLD = 40 # Пороговое значение для определения чёрного для датчиков отражения
+REF_LS_TRESHOLD = 40 # Пороговое значение для определения чёрного для датчиков отражения
 
-DIST_TO_CUBE_SIDE = 190 # Дистанция стенки куба для выравнивания
+DIST_TO_CUBE_SIDE = 185 # Дистанция стенки куба для выравнивания
 
 MOT2_ENC_RANGE = 300 # Тиков энкодера от края до края для мотора для горизонтальной перемещении каретки
 
@@ -43,8 +45,8 @@ def ConvBinary2DecimalCode(binArr):
 # Функция для печати значений на экран
 def Telemetry():
     while True:
-        rrls1 = rcu.GetLightSensor(1) # Считать данные с датчика отражения 1 порта
-        rrls4 = rcu.GetLightSensor(4) # Считать данные с датчика отражения 4 порта
+        rrls1 = rcu.GetLightSensor(LEFT_LS_PORT) # Считать данные с датчика отражения 1 порта
+        rrls4 = rcu.GetLightSensor(RIGHT_LS_PORT) # Считать данные с датчика отражения 4 порта
         rls1 = mymath.map(rrls1, BLACK_REF_RAW_LS1, WHITE_REF_RAW_LS1, 0, 100)
         rls4 = mymath.map(rrls4, BLACK_REF_RAW_LS4, WHITE_REF_RAW_LS4, 0, 100)
         ls2 = rcu.GetLaserDist(2, 0)
@@ -75,17 +77,17 @@ def Telemetry():
 def ReadBarCode():
     # Считать штрихкод
     for i in range(4):
-        rrls1 = rcu.GetLightSensor(1) # Считать данные с датчика отражения 1 порта
-        rrls4 = rcu.GetLightSensor(4) # Считать данные с датчика отражения 4 порта
+        rrls1 = rcu.GetLightSensor(LEFT_LS_PORT) # Считать данные с датчика отражения 1 порта
+        rrls4 = rcu.GetLightSensor(RIGHT_LS_PORT) # Считать данные с датчика отражения 4 порта
         rls1 = mymath.map(rrls1, BLACK_REF_RAW_LS1, WHITE_REF_RAW_LS1, 0, 100)
         rls4 = mymath.map(rrls4, BLACK_REF_RAW_LS4, WHITE_REF_RAW_LS4, 0, 100)
         # Левый датчик
-        if rls1 > REF_VAL_LS_TRESHOLD:
+        if rls1 > REF_LS_TRESHOLD:
             barcode_bin_array[i][0] = 0 # Белый
         else:
             barcode_bin_array[i][0] = 1 # Чёрный
         # Правый датчик
-        if rls4 > REF_VAL_LS_TRESHOLD:
+        if rls4 > REF_LS_TRESHOLD:
             barcode_bin_array[i][1] = 0 # Белый
         else:
             barcode_bin_array[i][1] = 1 # Чёрный
@@ -166,13 +168,13 @@ def MotorStraightAngle(port_left_motor, port_right_motor, speed, angle, retentio
     elm_angle = rcu.GetMotorCode(CHASSIS_LEFT_MOT_PORT) + angle # Значение энкодера левого мотора с нужным углом
     erm_angle = rcu.GetMotorCode(CHASSIS_RIGHT_MOT_PORT) + angle # Значение энкодера правого мотора с нужным углом
 
-    rcu.SetMotorStraightAngle(port_left_motor, port_right_motor, speed, angle) # Запустить моторы на нужный тик энкодера
-    
     MOT_ENC_ERR_TRESHOLD = 20 
     ELM_ANGL_LEFT_RANGE = elm_angle - MOT_ENC_ERR_TRESHOLD
     ELM_ANGL_RIGHT_RANGE = elm_angle + MOT_ENC_ERR_TRESHOLD
     ELM_ANGL_LEFT_RANGE = erm_angle - MOT_ENC_ERR_TRESHOLD
     ELM_ANGL_RIGHT_RANGE = erm_angle + MOT_ENC_ERR_TRESHOLD
+
+    rcu.SetMotorStraightAngle(port_left_motor, port_right_motor, speed, angle) # Запустить моторы на нужный тик энкодера
 
     # Ждём достижения проезда
     startTime = pyb.millis()
@@ -183,7 +185,7 @@ def MotorStraightAngle(port_left_motor, port_right_motor, speed, angle, retentio
             break
         rcu.SetWaitForTime(0.005)
 
-    rcu.Set3CLed(5, 4) # Сигнал на лампу, что завершили
+    rcu.Set3CLed(LED_PORT, 4) # Сигнал на лампу, что завершили
 
     # Удерживаем моторы, если нужно
     if retention:
@@ -211,15 +213,26 @@ def PauseUntilMotorStalled(motorPort, timeOut=3000):
 
 # Функция решения задачи
 def Solve():
+    ### Мотор маркера манипулятора установить в крайнее положение и сбросить
+    rcu.SetMotor(PEN_MANIP_MOTOR_PORT, 40)
+    PauseUntilMotorStalled(PEN_MANIP_MOTOR_PORT)
+    rcu.SetMotor(PEN_MANIP_MOTOR_PORT, 0)
+    rcu.SetWaitForTime(0.01)
+    rcu.SetMotorCode(PEN_MANIP_MOTOR_PORT) # Сбросить энкодер мотора в линейном перемещении манипулятора
+    rcu.Set3CLed(LED_PORT, 2) # Сигнал на лампу, что завершили
+    rcu.SetWaitForTime(0.1)
+    rcu.Set3CLed(LED_PORT, 0) # Сигнал на лампу, что завершили
+
+    ### Мотор линейного перемещения манипулятора установить в крайнее левое положение и сбросить
     rcu.SetMotor(PEN_MANIP_LINEAR_MOTOR_PORT, -40)
     PauseUntilMotorStalled(PEN_MANIP_LINEAR_MOTOR_PORT)
-    rcu.SetWaitForTime(0.01)
     rcu.SetMotor(PEN_MANIP_LINEAR_MOTOR_PORT, 0)
+    rcu.SetWaitForTime(0.01)
     rcu.SetMotorCode(PEN_MANIP_LINEAR_MOTOR_PORT) # Сбросить энкодер мотора в линейном перемещении манипулятора
     rcu.Set3CLed(LED_PORT, 1) # Сигнал на лампу, что завершили
     rcu.SetWaitForTime(0.1)
     rcu.Set3CLed(LED_PORT, 0) # Сигнал на лампу, что завершили
-    
+
     #rcu.SetMotorStraight(1, 4, 20)
     #SyncChassisMove(360, 20, True)
     #MotorStraightAngle(CHASSIS_LEFT_MOT_PORT, CHASSIS_RIGHT_MOT_PORT, 25, 360, True)
@@ -227,11 +240,24 @@ def Solve():
     #rcu.SetWaitForTime(0.1)
     #rcu.Set3CLed(LED_PORT, 0) # Сигнал на лампу, что завершили
 
-    # Выравнивание у стороны куба
+    ### Вращение мотора в режиме сервопривода вверх
+    rcu.SetMotorServo(PEN_MANIP_MOTOR_PORT, -50, 110)
+    rcu.SetWaitForAngle(PEN_MANIP_MOTOR_PORT, -50, 110)
+
+    ### Выравнивание у стороны куба
     WallAlignment(DIST_TO_CUBE_SIDE, 40, regulationTime=500, debug=True)
     rcu.Set3CLed(LED_PORT, 3) # Сигнал на лампу, что завершили
     rcu.SetWaitForTime(0.1)
     rcu.Set3CLed(LED_PORT, 0) # Сигнал на лампу, что завершили
+    
+    ### Чертим линии
+
+    rcu.SetMotorServo(PEN_MANIP_MOTOR_PORT, 100, 35)
+    rcu.SetWaitForAngle(PEN_MANIP_MOTOR_PORT, 100, 35)
+
+    rcu.SetWaitForTime(0.5)
+
+    WallAlignment(DIST_TO_CUBE_SIDE + 20, 40, regulationTime=500, debug=True)
 
     #ReadBarCode() # Считать штрих код с листка
     #result = ConvBinary2DecimalCode(barcode_bin_array) # Узнаём и записываем в переменную число от штрихкода
