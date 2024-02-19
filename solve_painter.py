@@ -4,26 +4,37 @@ import pyb
 import mymath
 import pid
 
+
+### Коэффициенты регуляторов
 SYNC_MOTORS_MOVE_KP = 0.8
 
 WALL_ALIGNMENT_KP = 1.1
 
-MOTOR_STRAIGHT_TIME_OUT = 1000
+LINE_ALIGNMENT_KP = 1
 
+### Номера портов моторов
 CHASSIS_LEFT_MOT_PORT = 2 # Разъём левого мотора в шасси
 CHASSIS_RIGHT_MOT_PORT = 3 # Разъём правого мотора в шасси
 PEN_MANIP_LINEAR_MOTOR_PORT = 1 # Разъём мотора линейного перемещения в манипуляторе маркера
 PEN_MANIP_MOTOR_PORT = 4 # Разъём мотора с маркером
+
+### Номера портов сенсоров
+LEFT_LIGHT_SEN_PORT = 1 # Левый датчик отражения
+RIGHT_LIGHT_SEN_PORT = 4 # Правый датчик отпражения
+LEFT_LASER_SEN_PORT = 2 # Левый лазерный датчик
+RIGHT_LASER_SEN_PORT = 3 # Правый лазерный датчик
 LED_PORT = 5 # Порт модуля лампы
-LEFT_LS_PORT = 2 # Левый датчик отражения
-RIGHT_LS_PORT = 3 # Правый датчик отпражения
 
-BLACK_REF_RAW_LS1 = 5125
-BLACK_REF_RAW_LS4 = 5185
-WHITE_REF_RAW_LS1 = 2930
-WHITE_REF_RAW_LS4 = 3041
+### Сырые значения отражения на белом и чёрном левого и правого датчика отражения
+BLACK_REF_RAW_L_LS = 484
+BLACK_REF_RAW_R_LS = 585
+WHITE_REF_RAW_L_LS = 2903
+WHITE_REF_RAW_R_LS = 3048
 
-REF_LS_TRESHOLD = 40 # Пороговое значение для определения чёрного для датчиков отражения
+### Другое
+MOTOR_STRAIGHT_TIME_OUT = 1000
+
+REF_LS_TRESHOLD = 50 # Пороговое значение для определения чёрного для датчиков отражения
 
 DIST_TO_CUBE_SIDE = 185 # Дистанция стенки куба для выравнивания
 
@@ -44,26 +55,33 @@ def ConvBinary2DecimalCode(binArr):
 
 # Функция для печати значений на экран
 def Telemetry():
+    global BLACK_REF_RAW_L_LS, WHITE_REF_RAW_L_LS, BLACK_REF_RAW_R_LS, WHITE_REF_RAW_R_LS
     while True:
-        rrls1 = rcu.GetLightSensor(LEFT_LS_PORT) # Считать данные с датчика отражения 1 порта
-        rrls4 = rcu.GetLightSensor(RIGHT_LS_PORT) # Считать данные с датчика отражения 4 порта
-        rls1 = mymath.map(rrls1, BLACK_REF_RAW_LS1, WHITE_REF_RAW_LS1, 0, 100)
-        rls4 = mymath.map(rrls4, BLACK_REF_RAW_LS4, WHITE_REF_RAW_LS4, 0, 100)
-        ls2 = rcu.GetLaserDist(2, 0)
-        ls3 = rcu.GetLaserDist(3, 0)
+        lrrls = rcu.GetLightSensor(LEFT_LIGHT_SEN_PORT) # Считать данные с датчика отражения 1 порта
+        rrrls = rcu.GetLightSensor(RIGHT_LIGHT_SEN_PORT) # Считать данные с датчика отражения 4 порта
+        lrls = mymath.map(lrrls, BLACK_REF_RAW_L_LS, WHITE_REF_RAW_L_LS, 0, 100)
+        rrls = mymath.map(rrrls, BLACK_REF_RAW_R_LS, WHITE_REF_RAW_R_LS, 0, 100)
+        lrls = mymath.constrain(lrls, 0, 100)
+        rrls = mymath.constrain(rrls, 0, 100)
+        lls = rcu.GetLaserDist(LEFT_LASER_SEN_PORT, 0)
+        rls = rcu.GetLaserDist(RIGHT_LASER_SEN_PORT, 0)
         elm = rcu.GetMotorCode(CHASSIS_LEFT_MOT_PORT)
         erm = rcu.GetMotorCode(CHASSIS_RIGHT_MOT_PORT)
         em1 = rcu.GetMotorCode(PEN_MANIP_LINEAR_MOTOR_PORT)
         em4 = rcu.GetMotorCode(3)
         #rcu.SetLCDClear(0) # Заливка экрана чёрным
-        rcu.SetDisplayStringXY(1, 1, "rrls1: " + str(rrls1), 0xFFE0, 0x0000, 0)
-        rcu.SetDisplayStringXY(1, 20, "rrls4: " + str(rrls4), 0xFFE0, 0x0000, 0)
-        rcu.SetDisplayStringXY(120, 1, "rls1: " + str(rls1), 0xFFE0, 0x0000, 0)
-        rcu.SetDisplayStringXY(120, 20, "rls4: " + str(rls4), 0xFFE0, 0x0000, 0)
+        rcu.SetLCDFilledRectangle2(1, 1, 60, 15, 0x0000)
+        rcu.SetDisplayStringXY(1, 1, "lrrls: " + str(lrrls), 0xFFE0, 0x0000, 0)
+        rcu.SetLCDFilledRectangle2(1, 20, 60, 15, 0x0000)
+        rcu.SetDisplayStringXY(1, 20, "rrrls: " + str(rrrls), 0xFFE0, 0x0000, 0)
+        rcu.SetLCDFilledRectangle2(120, 1, 60, 15, 0x0000)
+        rcu.SetDisplayStringXY(120, 1, "lrls: " + str(lrls), 0xFFE0, 0x0000, 0)
+        rcu.SetLCDFilledRectangle2(120, 20, 60, 15, 0x0000)
+        rcu.SetDisplayStringXY(120, 20, "rrls: " + str(rrls), 0xFFE0, 0x0000, 0)
         rcu.SetLCDFilledRectangle2(35, 40, 60, 15, 0x0000)
-        rcu.SetDisplayStringXY(1, 40, "ls2: " + str(ls2), 0xFFE0, 0x0000, 0)
+        rcu.SetDisplayStringXY(1, 40, "lls: " + str(lls), 0xFFE0, 0x0000, 0)
         rcu.SetLCDFilledRectangle2(35, 60, 60, 15, 0x0000)
-        rcu.SetDisplayStringXY(1, 60, "ls3: " + str(ls3), 0xFFE0, 0x0000, 0)
+        rcu.SetDisplayStringXY(1, 60, "rls: " + str(rls), 0xFFE0, 0x0000, 0)
         rcu.SetLCDFilledRectangle2(35, 80, 60, 15, 0x0000)
         rcu.SetDisplayStringXY(1, 80, "elm: " + str(elm), 0xFFE0, 0x0000, 0)
         rcu.SetLCDFilledRectangle2(35, 100, 60, 15, 0x0000)
@@ -77,10 +95,10 @@ def Telemetry():
 def ReadBarCode():
     # Считать штрихкод
     for i in range(4):
-        rrls1 = rcu.GetLightSensor(LEFT_LS_PORT) # Считать данные с датчика отражения 1 порта
-        rrls4 = rcu.GetLightSensor(RIGHT_LS_PORT) # Считать данные с датчика отражения 4 порта
-        rls1 = mymath.map(rrls1, BLACK_REF_RAW_LS1, WHITE_REF_RAW_LS1, 0, 100)
-        rls4 = mymath.map(rrls4, BLACK_REF_RAW_LS4, WHITE_REF_RAW_LS4, 0, 100)
+        rrls1 = rcu.GetLightSensor(LEFT_LIGHT_SEN_PORT) # Считать данные с датчика отражения 1 порта
+        rrls4 = rcu.GetLightSensor(RIGHT_LIGHT_SEN_PORT) # Считать данные с датчика отражения 4 порта
+        rls1 = mymath.map(rrls1, BLACK_REF_RAW_L_LS, WHITE_REF_RAW_L_LS, 0, 100)
+        rls4 = mymath.map(rrls4, BLACK_REF_RAW_R_LS, WHITE_REF_RAW_R_LS, 0, 100)
         # Левый датчик
         if rls1 > REF_LS_TRESHOLD:
             barcode_bin_array[i][0] = 0 # Белый
@@ -95,9 +113,66 @@ def ReadBarCode():
         if i < 3:
             pass
             #DistMove(25, 20) # Движение на следующий участок для считывания
-        
-def WallAlignment(distanceToWall, maxSpeed=50, regulationTime=1000, retention=True, timeOut=10000, debug=False):
-    LS_ERR_TRESHOLD = 10
+
+def LineAlignment(maxSpeed = 50, alignmentTime = 1000, lineIsForward = True, retention=True, timeOut=50000, debug=False):
+    deregFlag = False
+    prevTime = 0
+    multiplier = 1 if lineIsForward else -1 # lineIsForward - линия спереди, иначе сзади
+    startTime = pyb.millis()
+    while pyb.millis() - startTime < timeOut:
+        currTime = pyb.millis()
+        loopTime = currTime - prevTime
+        prevTime = pyb.millis()
+        lrrls = rcu.GetLightSensor(LEFT_LIGHT_SEN_PORT) # Считать данные с датчика отражения 1 порта
+        rrrls = rcu.GetLightSensor(RIGHT_LIGHT_SEN_PORT) # Считать данные с датчика отражения 4 порта
+        lrls = mymath.map(lrrls, BLACK_REF_RAW_L_LS, WHITE_REF_RAW_L_LS, 0, 100)
+        rrls = mymath.map(rrrls, BLACK_REF_RAW_R_LS, WHITE_REF_RAW_R_LS, 0, 100)
+        lrls = mymath.constrain(lrls, 0, 100)
+        rrls = mymath.constrain(rrls, 0, 100)
+        error_l = lrls - REF_LS_TRESHOLD
+        error_r = rrls - REF_LS_TRESHOLD
+        u_left = (error_l * LINE_ALIGNMENT_KP) * multiplier
+        u_right = (error_r * LINE_ALIGNMENT_KP) * multiplier
+        u_left = mymath.constrain(u_left, -maxSpeed, maxSpeed)
+        u_right = mymath.constrain(u_right, -maxSpeed, maxSpeed)
+
+        if debug:
+            rcu.SetLCDFilledRectangle2(50, 1, 60, 15, 0x0000)
+            rcu.SetDisplayStringXY(1, 1, "lrrls: " + str(lrrls), 0xFFE0, 0x0000, 0)
+            rcu.SetLCDFilledRectangle2(50, 20, 60, 15, 0x0000)
+            rcu.SetDisplayStringXY(1, 20, "rrrls: " + str(rrrls), 0xFFE0, 0x0000, 0)
+            rcu.SetLCDFilledRectangle2(160, 1, 100, 15, 0x0000)
+            rcu.SetDisplayStringXY(120, 1, "lrls: " + str(lrls), 0xFFE0, 0x0000, 0)
+            rcu.SetLCDFilledRectangle2(160, 20, 100, 15, 0x0000)
+            rcu.SetDisplayStringXY(120, 20, "rrls: " + str(rrls), 0xFFE0, 0x0000, 0)
+
+            rcu.SetLCDFilledRectangle2(1, 40, 60, 15, 0x0000)
+            rcu.SetDisplayStringXY(1, 40, "error_l: " + str(error_l), 0xFFE0, 0x0000, 0)
+            rcu.SetLCDFilledRectangle2(1, 60, 60, 15, 0x0000)
+            rcu.SetDisplayStringXY(1, 60, "error_r: " + str(error_r), 0xFFE0, 0x0000, 0)
+            rcu.SetLCDFilledRectangle2(1, 80, 60, 15, 0x0000)
+            rcu.SetDisplayStringXY(1, 80, "u_left: " + str(u_left), 0xFFE0, 0x0000, 0)
+            rcu.SetLCDFilledRectangle2(1, 100, 60, 15, 0x0000)
+            rcu.SetDisplayStringXY(1, 100, "u_right: " + str(u_right), 0xFFE0, 0x0000, 0)
+
+            rcu.SetLCDFilledRectangle2(35, 120, 60, 15, 0x0000)
+            rcu.SetDisplayStringXY(1, 120, "dt: " + str(loopTime), 0xFFE0, 0x0000, 0)
+
+        rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, u_left)
+        rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, u_right)
+        rcu.SetWaitForTime(0.01)
+
+    # Удерживаем моторы, если нужно
+    if retention:
+        rcu.SetMotorServo(CHASSIS_LEFT_MOT_PORT, maxSpeed, 0)
+        rcu.SetMotorServo(CHASSIS_RIGHT_MOT_PORT, maxSpeed, 0)
+    else:
+        rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, 0)
+        rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, 0)
+
+
+def WallAlignment(distanceToWall, maxSpeed=50, regulationTime=1000, retention=True, timeOut=5000, debug=False):
+    LS_ERR_TRESHOLD = 10 # Пороговое значение, что робот практически достиг уставки
     deregFlag = False
     prevTime = 0
     startTime = pyb.millis()
@@ -105,13 +180,15 @@ def WallAlignment(distanceToWall, maxSpeed=50, regulationTime=1000, retention=Tr
         currTime = pyb.millis()
         loopTime = currTime - prevTime
         prevTime = pyb.millis()
-        lls = rcu.GetLaserDist(2, 0)
-        rls = rcu.GetLaserDist(3, 0)
+        lls = rcu.GetLaserDist(LEFT_LASER_SEN_PORT, 0)
+        rls = rcu.GetLaserDist(RIGHT_LASER_SEN_PORT, 0)
         if debug:
             rcu.SetLCDFilledRectangle2(35, 0, 60, 15, 0x0000)
             rcu.SetDisplayStringXY(1, 0, "lls: " + str(lls), 0xFFE0, 0x0000, 0)
             rcu.SetLCDFilledRectangle2(35, 20, 60, 15, 0x0000)
             rcu.SetDisplayStringXY(1, 20, "lsr: " + str(rls), 0xFFE0, 0x0000, 0)
+            rcu.SetLCDFilledRectangle2(35, 40, 60, 15, 0x0000)
+            rcu.SetDisplayStringXY(1, 40, "dt: " + str(loopTime), 0xFFE0, 0x0000, 0)
         error_l = lls - distanceToWall
         error_r = rls - distanceToWall
         if not(deregFlag) and abs(error_l) <= LS_ERR_TRESHOLD and abs(error_r) <= LS_ERR_TRESHOLD:
@@ -168,7 +245,7 @@ def MotorStraightAngle(port_left_motor, port_right_motor, speed, angle, retentio
     elm_angle = rcu.GetMotorCode(CHASSIS_LEFT_MOT_PORT) + angle # Значение энкодера левого мотора с нужным углом
     erm_angle = rcu.GetMotorCode(CHASSIS_RIGHT_MOT_PORT) + angle # Значение энкодера правого мотора с нужным углом
 
-    MOT_ENC_ERR_TRESHOLD = 20 
+    MOT_ENC_ERR_TRESHOLD = 20 # Пороговое значение для определения, что моторы достигли точки
     ELM_ANGL_LEFT_RANGE = elm_angle - MOT_ENC_ERR_TRESHOLD
     ELM_ANGL_RIGHT_RANGE = elm_angle + MOT_ENC_ERR_TRESHOLD
     ELM_ANGL_LEFT_RANGE = erm_angle - MOT_ENC_ERR_TRESHOLD
@@ -264,9 +341,10 @@ def Solve():
 
 # Главная функция
 def Main():
-    Solve()
-    #thread.start_new_thread(telemetry,())
-    #thread.start_new_thread(solve,())
+    #Solve()
+    LineAlignment(40, 5000)
+    #thread.start_new_thread(Telemetry,())
+    #thread.start_new_thread(Solve,())
 
     while True:
         pass
