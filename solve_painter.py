@@ -11,8 +11,8 @@ SYNC_MOTORS_MOVE_KP = 0.8
 WALL_ALIGNMENT_KP = 1.6
 WALL_ALIGNMENT_KD = 4
 
-LINE_ALIGNMENT_KP = 0.5
-LINE_ALIGNMENT_KD = 0.75
+LINE_ALIGNMENT_KP = 0.55
+LINE_ALIGNMENT_KD = 0.6
 
 ### Номера портов моторов
 CHASSIS_LEFT_MOT_PORT = 2 # Разъём левого мотора в шасси
@@ -38,7 +38,7 @@ MOTOR_STRAIGHT_TIME_OUT = 1000
 
 REF_LS_TRESHOLD = 50 # Пороговое значение для определения чёрного для датчиков отражения
 
-DIST_TO_CUBE_SIDE = 180 # Дистанция стенки куба для выравнивания
+DIST_TO_CUBE_SIDE = 165 # Дистанция стенки куба для выравнивания
 
 MOT2_ENC_RANGE = 300 # Тиков энкодера от края до края для мотора для горизонтальной перемещении каретки
 
@@ -342,8 +342,8 @@ def Solve():
     #rcu.Set3CLed(LED_PORT, 0) # Сигнал на лампу, что завершили
 
     ### Вращение мотора в режиме сервопривода вверх
-    rcu.SetMotorServo(PEN_MANIP_MOTOR_PORT, -50, 110)
-    rcu.SetWaitForAngle(PEN_MANIP_MOTOR_PORT, -50, 110)
+    rcu.SetMotorServo(PEN_MANIP_MOTOR_PORT, -50, 105)
+    rcu.SetWaitForAngle(PEN_MANIP_MOTOR_PORT, -50, 105)
 
     ### Выравнивание у стороны куба
     WallAlignment(DIST_TO_CUBE_SIDE, 40, regulationTime=3000, debug=False)
@@ -352,24 +352,23 @@ def Solve():
     rcu.Set3CLed(LED_PORT, 0) # Сигнал на лампу, что завершили
     
     ### Чертим линии
-
-    rcu.SetMotorServo(PEN_MANIP_MOTOR_PORT, 100, 35)
-    rcu.SetWaitForAngle(PEN_MANIP_MOTOR_PORT, 100, 35)
+    rcu.SetMotorServo(PEN_MANIP_MOTOR_PORT, 50, 60)
+    rcu.SetWaitForAngle(PEN_MANIP_MOTOR_PORT, 50, 60)
 
     rcu.SetWaitForTime(0.5)
 
     WallAlignment(DIST_TO_CUBE_SIDE + 40, 40, regulationTime=500, debug=False)
 
-    rcu.SetMotorServo(PEN_MANIP_MOTOR_PORT, -50, 35)
-    rcu.SetWaitForAngle(PEN_MANIP_MOTOR_PORT, -50, 35)
+    rcu.SetMotorServo(PEN_MANIP_MOTOR_PORT, -50, 60)
+    rcu.SetWaitForAngle(PEN_MANIP_MOTOR_PORT, -50, 60)
 
     #ReadBarCode() # Считать штрих код с листка
     #result = ConvBinary2DecimalCode(barcode_bin_array) # Узнаём и записываем в переменную число от штрихкода
 
 # Главная функция
 def Main():
-    LineAlignment(40, 3000, True)
-    #Solve()
+    #LineAlignment(40, 3000, True)
+    Solve()
     #thread.start_new_thread(Telemetry,())
     #thread.start_new_thread(Solve,())
 
