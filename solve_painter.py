@@ -8,9 +8,11 @@ import pid
 ### Коэффициенты регуляторов
 SYNC_MOTORS_MOVE_KP = 0.8
 
-WALL_ALIGNMENT_KP = 1.1
+WALL_ALIGNMENT_KP = 1.6
+WALL_ALIGNMENT_KD = 4
 
-LINE_ALIGNMENT_KP = 1
+LINE_ALIGNMENT_KP = 0.5
+LINE_ALIGNMENT_KD = 0.75
 
 ### Номера портов моторов
 CHASSIS_LEFT_MOT_PORT = 2 # Разъём левого мотора в шасси
@@ -36,7 +38,7 @@ MOTOR_STRAIGHT_TIME_OUT = 1000
 
 REF_LS_TRESHOLD = 50 # Пороговое значение для определения чёрного для датчиков отражения
 
-DIST_TO_CUBE_SIDE = 185 # Дистанция стенки куба для выравнивания
+DIST_TO_CUBE_SIDE = 180 # Дистанция стенки куба для выравнивания
 
 MOT2_ENC_RANGE = 300 # Тиков энкодера от края до края для мотора для горизонтальной перемещении каретки
 
@@ -114,7 +116,15 @@ def ReadBarCode():
             pass
             #DistMove(25, 20) # Движение на следующий участок для считывания
 
-def LineAlignment(maxSpeed = 50, alignmentTime = 1000, lineIsForward = True, retention=True, timeOut=50000, debug=False):
+def LineAlignment(maxSpeed = 50, alignmentTime = 1000, lineIsForward = True, retention=True, timeOut=5000, debug=False):
+    pid_left = pid.PIDController()
+    pid_right = pid.PIDController()
+    pid_left.setGrains(LINE_ALIGNMENT_KP, 0, LINE_ALIGNMENT_KD)
+    pid_right.setGrains(LINE_ALIGNMENT_KP, 0, LINE_ALIGNMENT_KD)
+    pid_left.setControlSaturation(-100, 100)
+    pid_right.setControlSaturation(-100, 100)
+    pid_left.reset()
+    pid_right.reset()
     deregFlag = False
     prevTime = 0
     multiplier = 1 if lineIsForward else -1 # lineIsForward - линия спереди, иначе сзади
@@ -131,10 +141,14 @@ def LineAlignment(maxSpeed = 50, alignmentTime = 1000, lineIsForward = True, ret
         rrls = mymath.constrain(rrls, 0, 100)
         error_l = lrls - REF_LS_TRESHOLD
         error_r = rrls - REF_LS_TRESHOLD
-        u_left = (error_l * LINE_ALIGNMENT_KP) * multiplier
-        u_right = (error_r * LINE_ALIGNMENT_KP) * multiplier
+        pid_left.setPoint(error_l)
+        pid_right.setPoint(error_r)
+        u_left = pid_left.compute(loopTime, 0) * multiplier
+        u_right = pid_right.compute(loopTime, 0) * multiplier
         u_left = mymath.constrain(u_left, -maxSpeed, maxSpeed)
         u_right = mymath.constrain(u_right, -maxSpeed, maxSpeed)
+        rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, u_left)
+        rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, u_right)
 
         if debug:
             rcu.SetLCDFilledRectangle2(50, 1, 60, 15, 0x0000)
@@ -157,9 +171,7 @@ def LineAlignment(maxSpeed = 50, alignmentTime = 1000, lineIsForward = True, ret
 
             rcu.SetLCDFilledRectangle2(35, 120, 60, 15, 0x0000)
             rcu.SetDisplayStringXY(1, 120, "dt: " + str(loopTime), 0xFFE0, 0x0000, 0)
-
-        rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, u_left)
-        rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, u_right)
+        
         rcu.SetWaitForTime(0.01)
 
     # Удерживаем моторы, если нужно
@@ -172,7 +184,15 @@ def LineAlignment(maxSpeed = 50, alignmentTime = 1000, lineIsForward = True, ret
 
 
 def WallAlignment(distanceToWall, maxSpeed=50, regulationTime=1000, retention=True, timeOut=5000, debug=False):
-    LS_ERR_TRESHOLD = 10 # Пороговое значение, что робот практически достиг уставки
+    LS_ERR_TRESHOLD = 5 # Пороговое значение, что робот практически достиг уставки
+    pid_left = pid.PIDController()
+    pid_right = pid.PIDController()
+    pid_left.setGrains(WALL_ALIGNMENT_KP, 0, WALL_ALIGNMENT_KD)
+    pid_right.setGrains(WALL_ALIGNMENT_KP, 0, WALL_ALIGNMENT_KD)
+    pid_left.setControlSaturation(-100, 100)
+    pid_right.setControlSaturation(-100, 100)
+    pid_left.reset()
+    pid_right.reset()
     deregFlag = False
     prevTime = 0
     startTime = pyb.millis()
@@ -182,13 +202,6 @@ def WallAlignment(distanceToWall, maxSpeed=50, regulationTime=1000, retention=Tr
         prevTime = pyb.millis()
         lls = rcu.GetLaserDist(LEFT_LASER_SEN_PORT, 0)
         rls = rcu.GetLaserDist(RIGHT_LASER_SEN_PORT, 0)
-        if debug:
-            rcu.SetLCDFilledRectangle2(35, 0, 60, 15, 0x0000)
-            rcu.SetDisplayStringXY(1, 0, "lls: " + str(lls), 0xFFE0, 0x0000, 0)
-            rcu.SetLCDFilledRectangle2(35, 20, 60, 15, 0x0000)
-            rcu.SetDisplayStringXY(1, 20, "lsr: " + str(rls), 0xFFE0, 0x0000, 0)
-            rcu.SetLCDFilledRectangle2(35, 40, 60, 15, 0x0000)
-            rcu.SetDisplayStringXY(1, 40, "dt: " + str(loopTime), 0xFFE0, 0x0000, 0)
         error_l = lls - distanceToWall
         error_r = rls - distanceToWall
         if not(deregFlag) and abs(error_l) <= LS_ERR_TRESHOLD and abs(error_r) <= LS_ERR_TRESHOLD:
@@ -196,12 +209,23 @@ def WallAlignment(distanceToWall, maxSpeed=50, regulationTime=1000, retention=Tr
             deregStartTime = pyb.millis()
         if deregFlag and pyb.millis() - deregStartTime >= regulationTime:
             break
-        u_left = error_l * WALL_ALIGNMENT_KP
-        u_right = error_r * WALL_ALIGNMENT_KP
+        pid_left.setPoint(error_l)
+        pid_right.setPoint(error_r)
+        u_left = pid_left.compute(loopTime, 0)
+        u_right = pid_right.compute(loopTime, 0)
         u_left = mymath.constrain(u_left, -maxSpeed, maxSpeed)
         u_right = mymath.constrain(u_right, -maxSpeed, maxSpeed)
         rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, u_left)
         rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, u_right)
+
+        if debug:
+            rcu.SetLCDFilledRectangle2(35, 0, 60, 15, 0x0000)
+            rcu.SetDisplayStringXY(1, 0, "lls: " + str(lls), 0xFFE0, 0x0000, 0)
+            rcu.SetLCDFilledRectangle2(35, 20, 60, 15, 0x0000)
+            rcu.SetDisplayStringXY(1, 20, "lsr: " + str(rls), 0xFFE0, 0x0000, 0)
+            rcu.SetLCDFilledRectangle2(35, 40, 60, 15, 0x0000)
+            rcu.SetDisplayStringXY(1, 40, "dt: " + str(loopTime), 0xFFE0, 0x0000, 0)
+
         rcu.SetWaitForTime(0.01)
 
     # Удерживаем моторы, если нужно
@@ -322,7 +346,7 @@ def Solve():
     rcu.SetWaitForAngle(PEN_MANIP_MOTOR_PORT, -50, 110)
 
     ### Выравнивание у стороны куба
-    WallAlignment(DIST_TO_CUBE_SIDE, 40, regulationTime=500, debug=True)
+    WallAlignment(DIST_TO_CUBE_SIDE, 40, regulationTime=3000, debug=False)
     rcu.Set3CLed(LED_PORT, 3) # Сигнал на лампу, что завершили
     rcu.SetWaitForTime(0.1)
     rcu.Set3CLed(LED_PORT, 0) # Сигнал на лампу, что завершили
@@ -334,15 +358,18 @@ def Solve():
 
     rcu.SetWaitForTime(0.5)
 
-    WallAlignment(DIST_TO_CUBE_SIDE + 20, 40, regulationTime=500, debug=True)
+    WallAlignment(DIST_TO_CUBE_SIDE + 40, 40, regulationTime=500, debug=False)
+
+    rcu.SetMotorServo(PEN_MANIP_MOTOR_PORT, -50, 35)
+    rcu.SetWaitForAngle(PEN_MANIP_MOTOR_PORT, -50, 35)
 
     #ReadBarCode() # Считать штрих код с листка
     #result = ConvBinary2DecimalCode(barcode_bin_array) # Узнаём и записываем в переменную число от штрихкода
 
 # Главная функция
 def Main():
+    LineAlignment(40, 3000, True)
     #Solve()
-    LineAlignment(40, 5000)
     #thread.start_new_thread(Telemetry,())
     #thread.start_new_thread(Solve,())
 

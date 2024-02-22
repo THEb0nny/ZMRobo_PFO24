@@ -26,7 +26,7 @@ class PIDController():
         kd = max(0, kd)
         b = mymath.constrain(b, 0, 1)
 
-        selfI += self.kp * (self.b * self.ysp - self.y) - kp * (b * self.ysp - self.y)
+        self.I += self.kp * (self.b * self.ysp - self.y) - kp * (b * self.ysp - self.y)
 
         self.kp = kp
         self.ki = ki
@@ -45,12 +45,12 @@ class PIDController():
     
     def compute(self, timestep, y):
         h = timestep / 1000.0
-        K = self.Kp
-        #e = self.ysp - y
+        K = self.kp
+        e = self.ysp - y
 
         P = K * (self.b * self.ysp - y)
 
-        if (self.kD):
+        if (self.kd):
             Td = self.kd / K
             ad = (2 * Td - self.N * h) / (2 * Td + self.N * h)
             bd = 2 * K * self.N * Td / (2 * Td + self.N * h)
