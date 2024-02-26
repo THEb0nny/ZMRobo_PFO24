@@ -1,7 +1,7 @@
 import rcu
 import pyb
 import tools
-
+import solve_painter
 
 def PauseUntilMotorStalled(motorPort, timeOut=3000):
     stall = 0
@@ -90,6 +90,7 @@ def DistMove(dist, speed, retention=True):
 # Поворот относительно центра на угол
 def SpinTurn(deg, speed):
     calc_mot_rotate = (deg * WHEELS_W) / WHEELS_D # Расчитать градусы для поворота в градусы для мотора
+    rcu.SetCarTurn(CHASSIS_LEFT_MOT_PORT, CHASSIS_RIGHT_MOT_PORT, speed, calc_mot_rotate)
 
 
 # Остановка моторов шасси
