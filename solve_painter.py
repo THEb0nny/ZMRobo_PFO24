@@ -41,7 +41,10 @@ WHITE_REF_RAW_L_LS = 2903
 WHITE_REF_RAW_R_LS = 3048
 
 ### Другое
-MOTOR_STRAIGHT_TIME_OUT = 1000
+WHEELS_D = 56 # Диаметр колёс
+WHEELS_W = 56 # Расстояние между центрами колёс (колея)
+
+MOT_ENC_RESOLUTION = 780 # Разрешение энкодеров на оборот
 
 REF_LS_TRESHOLD = 50 # Пороговое значение для определения чёрного для датчиков отражения
 REF_LS_LW_TRESHOLD = 40 # Пороговое значение для определения чёрного перекрёсткоф датчиков отражения
@@ -64,8 +67,8 @@ def ConvBinary2DecimalCode(binArr):
     return decimalNumArr # Вернуть массив чисел
 
 
+# Считать штрихкод
 def ReadBarCode():
-    # Считать штрихкод
     for i in range(4):
         rrls1 = rcu.GetLightSensor(LEFT_LIGHT_SEN_PORT) # Считать данные с датчика отражения 1 порта
         rrls4 = rcu.GetLightSensor(RIGHT_LIGHT_SEN_PORT) # Считать данные с датчика отражения 4 порта
@@ -84,7 +87,7 @@ def ReadBarCode():
         rcu.SetWaitForTime(0.1); # Задержка
         if i < 3:
             pass
-            #DistMove(25, 20) # Движение на следующий участок для считывания
+            #motors.DistMove(25, 20) # Движение на следующий участок для считывания
 
 
 # Движение по линии до перекрёстка
@@ -93,11 +96,11 @@ def LineFollowToIntersaction(speed, retention=True, debug=False):
     pid.setGrains(LW_KP, 0, LW_KD)
     pid.setControlSaturation(-100, 100)
     pid.reset()
-    prevTime = 0
+    prev_time = 0
     while True:
-        currTime = pyb.millis()
-        dt = currTime - prevTime
-        prevTime = pyb.millis()
+        curr_time = pyb.millis()
+        dt = curr_time - prev_time
+        prev_time = pyb.millis()
         lrrls = rcu.GetLightSensor(LEFT_LIGHT_SEN_PORT) # Считать данные с датчика отражения 1 порта
         rrrls = rcu.GetLightSensor(RIGHT_LIGHT_SEN_PORT) # Считать данные с датчика отражения 4 порта
         lrls = tools.GetNormRefLineSensor(lrrls, BLACK_REF_RAW_L_LS, WHITE_REF_RAW_L_LS)
@@ -128,32 +131,34 @@ def LineFollowToIntersaction(speed, retention=True, debug=False):
         
         tools.PauseUntilTime(currTime, 5)
 
-    # Удерживаем моторы, если нужно
-    if retention:
-        rcu.SetMotorServo(CHASSIS_LEFT_MOT_PORT, maxSpeed, 0)
-        rcu.SetMotorServo(CHASSIS_RIGHT_MOT_PORT, maxSpeed, 0)
-    else:
-        rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, 0)
-        rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, 0)
+    motors.ChassisStop(retention) # Команда остановки моторов шасси
 
 
 # Движение по линии на расстояние
-def LineFollowToIntersaction(speed, retention=True, debug=False):
+def LineFollowToDist(dist, speed, retention=True, debug=False):
+    elm_prev = rcu.GetMotorCode(CHASSIS_LEFT_MOT_PORT) # Значение с левого энкодера изначально
+    erm_prev = rcu.GetMotorCode(CHASSIS_RIGHT_MOT_PORT) # Значение с правого энкодера изначально
+    calc_mot_rotate = (dist / (math.pi * WHEELS_D)) * 720 # Рассчитываем сколько нужно повернуться моторам
+     #Сколько нужно пройти моторам включая накрученное до этого
+    lm_rotate = calc_mot_rotate + elm_prev # Считаем для левого мотора сколько в итоге нужно повернуться
+    rm_rotate = calc_mot_rotate + erm_prev # Считаем для правого мотора сколько в итоге нужно повернуться
     pid = pid.PIDController()
     pid.setGrains(LW_KP, 0, LW_KD)
     pid.setControlSaturation(-100, 100)
     pid.reset()
-    prevTime = 0
+    prev_time = 0
     while True:
-        currTime = pyb.millis()
-        dt = currTime - prevTime
-        prevTime = pyb.millis()
+        curr_time = pyb.millis()
+        dt = curr_time - prev_time
+        prev_time = pyb.millis()
         lrrls = rcu.GetLightSensor(LEFT_LIGHT_SEN_PORT) # Считать данные с датчика отражения 1 порта
         rrrls = rcu.GetLightSensor(RIGHT_LIGHT_SEN_PORT) # Считать данные с датчика отражения 4 порта
         lrls = tools.GetNormRefLineSensor(lrrls, BLACK_REF_RAW_L_LS, WHITE_REF_RAW_L_LS)
         rrls = tools.GetNormRefLineSensor(rrrls, BLACK_REF_RAW_R_LS, WHITE_REF_RAW_R_LS)
-        #if lrls < REF_LS_LW_TRESHOLD and rrls < REF_LS_LW_TRESHOLD:
-        #    break
+        elm = rcu.GetMotorCode(CHASSIS_LEFT_MOT_PORT)
+        erm = rcu.GetMotorCode(CHASSIS_RIGHT_MOT_PORT)
+        if elm >= lm_rotate and erm >= rm_rotate:
+            break
         error = lrls - rrls
         pid.setPoint(error)
         u = pid.compute(dt, 0)
@@ -178,16 +183,11 @@ def LineFollowToIntersaction(speed, retention=True, debug=False):
         
         tools.PauseUntilTime(currTime, 5)
 
-    # Удерживаем моторы, если нужно
-    if retention:
-        rcu.SetMotorServo(CHASSIS_LEFT_MOT_PORT, maxSpeed, 0)
-        rcu.SetMotorServo(CHASSIS_RIGHT_MOT_PORT, maxSpeed, 0)
-    else:
-        rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, 0)
-        rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, 0)
+    motors.ChassisStop(retention) # Команда остановки моторов шасси
 
 
-def LineAlignment(maxSpeed = 50, alignmentTime = 1000, lineIsForward = True, retention=True, timeOut=5000, debug=False):
+# Выравнивание на линии перпендикулярно
+def LineAlignment(maxSpeed = 50, alignmentTime = 1000, lineIsForward = True, retention=True, timeOut=4000, debug=False):
     pid_left = pid.PIDController()
     pid_right = pid.PIDController()
     pid_left.setGrains(LINE_ALIGNMENT_KP, 0, LINE_ALIGNMENT_KD)
@@ -196,14 +196,13 @@ def LineAlignment(maxSpeed = 50, alignmentTime = 1000, lineIsForward = True, ret
     pid_right.setControlSaturation(-100, 100)
     pid_left.reset()
     pid_right.reset()
-    deregFlag = False
     prevTime = 0
     multiplier = 1 if lineIsForward else -1 # lineIsForward - линия спереди, иначе сзади
-    startTime = pyb.millis()
-    while pyb.millis() - startTime < timeOut:
-        currTime = pyb.millis()
-        dt = currTime - prevTime
-        prevTime = pyb.millis()
+    start_time = pyb.millis()
+    while pyb.millis() - start_time < timeOut:
+        curr_time = pyb.millis()
+        dt = curr_time - prev_time
+        prev_time = pyb.millis()
         lrrls = rcu.GetLightSensor(LEFT_LIGHT_SEN_PORT) # Считать данные с датчика отражения 1 порта
         rrrls = rcu.GetLightSensor(RIGHT_LIGHT_SEN_PORT) # Считать данные с датчика отражения 4 порта
         lrls = tools.GetNormRefLineSensor(lrrls, BLACK_REF_RAW_L_LS, WHITE_REF_RAW_L_LS)
@@ -239,15 +238,10 @@ def LineAlignment(maxSpeed = 50, alignmentTime = 1000, lineIsForward = True, ret
         
         tools.PauseUntilTime(currTime, 5)
 
-    # Удерживаем моторы, если нужно
-    if retention:
-        rcu.SetMotorServo(CHASSIS_LEFT_MOT_PORT, maxSpeed, 0)
-        rcu.SetMotorServo(CHASSIS_RIGHT_MOT_PORT, maxSpeed, 0)
-    else:
-        rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, 0)
-        rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, 0)
+    motors.ChassisStop(retention) # Команда остановки моторов шасси
 
 
+# Выравнивание у стенки лазерными датчиками
 def WallAlignment(distanceToWall, maxSpeed=50, regulationTime=1000, retention=True, timeOut=5000, debug=False):
     LS_ERR_TRESHOLD = 5 # Пороговое значение, что робот практически достиг уставки
     pid_left = pid.PIDController()
@@ -258,21 +252,21 @@ def WallAlignment(distanceToWall, maxSpeed=50, regulationTime=1000, retention=Tr
     pid_right.setControlSaturation(-100, 100)
     pid_left.reset()
     pid_right.reset()
-    deregFlag = False
+    dereg_flag = False
     prevTime = 0
-    startTime = pyb.millis()
-    while pyb.millis() - startTime < timeOut:
-        currTime = pyb.millis()
-        dt = currTime - prevTime
-        prevTime = pyb.millis()
+    start_time = pyb.millis()
+    while pyb.millis() - start_time < timeOut:
+        curr_time = pyb.millis()
+        dt = curr_time - prev_time
+        prev_time = pyb.millis()
         lls = rcu.GetLaserDist(LEFT_LASER_SEN_PORT, 0)
         rls = rcu.GetLaserDist(RIGHT_LASER_SEN_PORT, 0)
         error_l = lls - distanceToWall
         error_r = rls - distanceToWall
-        if not(deregFlag) and abs(error_l) <= LS_ERR_TRESHOLD and abs(error_r) <= LS_ERR_TRESHOLD:
-            deregFlag = True
-            deregStartTime = pyb.millis()
-        if deregFlag and pyb.millis() - deregStartTime >= regulationTime:
+        if not(dereg_flag) and abs(error_l) <= LS_ERR_TRESHOLD and abs(error_r) <= LS_ERR_TRESHOLD:
+            dereg_flag = True
+            dereg_start_time = pyb.millis()
+        if dereg_flag and pyb.millis() - dereg_start_time >= regulationTime:
             break
         pid_left.setPoint(error_l)
         pid_right.setPoint(error_r)
@@ -293,13 +287,7 @@ def WallAlignment(distanceToWall, maxSpeed=50, regulationTime=1000, retention=Tr
 
         tools.PauseUntilTime(currTime, 5)
 
-    # Удерживаем моторы, если нужно
-    if retention:
-        rcu.SetMotorServo(CHASSIS_LEFT_MOT_PORT, maxSpeed, 0)
-        rcu.SetMotorServo(CHASSIS_RIGHT_MOT_PORT, maxSpeed, 0)
-    else:
-        rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, 0)
-        rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, 0)
+    motors.ChassisStop(retention) # Команда остановки моторов шасси
 
 
 # Функция решения задачи

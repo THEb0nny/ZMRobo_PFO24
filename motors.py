@@ -4,29 +4,28 @@ import tools
 
 
 def PauseUntilMotorStalled(motorPort, timeOut=3000):
-    startTime = pyb.millis()
-    rcu.SetWaitForTime(0.050) # Время после которого начинаем проверять
-    previous = rcu.GetMotorCode(motorPort)
     stall = 0
-    while pyb.millis() - startTime < timeOut:
-        current = rcu.GetMotorCode(motorPort)
-        if abs(current - previous) < 1:
+    enc_previous = rcu.GetMotorCode(motorPort)
+    start_time = pyb.millis()
+    rcu.SetWaitForTime(0.050) # Время после которого начинаем проверять
+    while pyb.millis() - start_time < timeOut:
+        enc_current = rcu.GetMotorCode(motorPort)
+        if abs(enc_current - enc_previous) < 1:
             stall += 1
             if stall > 2:
                 break
         else:
             stall = 0
-            previous = current
+            enc_previous = enc_current
         rcu.SetWaitForTime(0.005) # Ожидание между измерениями
 
 
 def SyncChassisMovement(lenght, speed, retention=True):
-    prevTime = 0
-    # Цикл синхронизации движения колеса к колесу
-    while True:
-        currTime = pyb.millis()
-        dt = currTime - prevTime
-        prevTime = pyb.millis()
+    prev_time = 0
+    while True: # Цикл синхронизации движения колеса к колесу
+        curr_time = pyb.millis()
+        dt = curr_time - prev_time
+        prev_time = pyb.millis()
         elm = rcu.GetMotorCode(CHASSIS_LEFT_MOT_PORT)
         erm = rcu.GetMotorCode(CHASSIS_RIGHT_MOT_PORT)
         if (elm + erm) / 2 >= lenght:
@@ -47,9 +46,10 @@ def SyncChassisMovement(lenght, speed, retention=True):
         rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, 0)
         rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, 0)
 
+
 # Движение прямолинейно на значение энкодера
 def MotorStraightAngle(speed, angle, retention):
-    #global MOTOR_STRAIGHT_TIME_OUT
+    # MOTOR_STRAIGHT_TIME_OUT = 1000
 
     elm_angle = rcu.GetMotorCode(CHASSIS_LEFT_MOT_PORT) + angle # Значение энкодера левого мотора с нужным углом
     erm_angle = rcu.GetMotorCode(CHASSIS_RIGHT_MOT_PORT) + angle # Значение энкодера правого мотора с нужным углом
@@ -65,13 +65,13 @@ def MotorStraightAngle(speed, angle, retention):
     # Ждём достижения проезда
     startTime = pyb.millis()
     while True:
-        if pyb.millis() - startTime >= MOTOR_STRAIGHT_TIME_OUT:
-            break
-        if ELM_ANGL_LEFT_RANGE <= rcu.GetMotorCode(CHASSIS_LEFT_MOT_PORT) <= ELM_ANGL_RIGHT_RANGE and ELM_ANGL_LEFT_RANGE <= rcu.GetMotorCode(CHASSIS_RIGHT_MOT_PORT) <= ELM_ANGL_RIGHT_RANGE:
+        # if pyb.millis() - startTime >= MOTOR_STRAIGHT_TIME_OUT:
+        #     break
+        elm = rcu.GetMotorCode(CHASSIS_LEFT_MOT_PORT)
+        erm = rcu.GetMotorCode(CHASSIS_RIGHT_MOT_PORT)
+        if ELM_ANGL_LEFT_RANGE <= elm <= ELM_ANGL_RIGHT_RANGE and ELM_ANGL_LEFT_RANGE <= erm <= ELM_ANGL_RIGHT_RANGE:
             break
         rcu.SetWaitForTime(0.005)
-
-    rcu.Set3CLed(LED_PORT, 4) # Сигнал на лампу, что завершили
 
     # Удерживаем моторы, если нужно
     if retention:
@@ -81,6 +81,23 @@ def MotorStraightAngle(speed, angle, retention):
         rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, 0)
         rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, 0)
 
+
+# Движение на расстояние в мм
+def DistMove(dist, speed, retention=True):
+    calc_mot_rotate = (dist / (math.pi * WHEELS_D)) * MOT_ENC_RESOLUTION # Расчёт угла поворота на дистанцию
+
+
 # Поворот относительно центра на угол
 def SpinTurn(deg, speed):
-    pass
+    calc_mot_rotate = (deg * WHEELS_W) / WHEELS_D # Расчитать градусы для поворота в градусы для мотора
+
+
+# Остановка моторов шасси
+def ChassisStop(retention):
+    # Удерживаем моторы, если нужно
+    if retention:
+        rcu.SetMotorServo(CHASSIS_LEFT_MOT_PORT, maxSpeed, 0)
+        rcu.SetMotorServo(CHASSIS_RIGHT_MOT_PORT, maxSpeed, 0)
+    else:
+        rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, 0)
+        rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, 0)
