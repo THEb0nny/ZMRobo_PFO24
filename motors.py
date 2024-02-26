@@ -84,12 +84,12 @@ def MotorStraightAngle(speed:int, angle:int, retention=True):
 
 # Движение на расстояние в мм
 def DistMove(dist: int, speed: int, retention=True):
-    calc_mot_rotate = (dist / (math.pi * WHEELS_D)) * MOT_ENC_RESOLUTION # Расчёт угла поворота на дистанцию
+    calc_mot_rotate = (dist / (math.pi * WHEELS_D)) * MOT_ENC_RESOLUTION  # Расчёт угла поворота на дистанцию
 
 
 # Поворот относительно центра на угол
 def SpinTurn(deg: float, speed: int):
-    calc_mot_rotate = (deg * WHEELS_W) / WHEELS_D # Расчитать градусы для поворота в градусы для мотора
+    calc_mot_rotate = ((deg * WHEELS_W) / WHEELS_D) * (MOT_ENC_RESOLUTION / 360)  # Расчитать градусы для поворота в градусы для мотора
     rcu.SetCarTurn(CHASSIS_LEFT_MOT_PORT, CHASSIS_RIGHT_MOT_PORT, speed, calc_mot_rotate)
 
 
