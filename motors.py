@@ -1,7 +1,7 @@
 import rcu
 import pyb
 import tools
-import solve_painter
+import math
 
 def PauseUntilMotorStalled(motorPort, timeOut=3000):
     stall = 0
@@ -20,85 +20,81 @@ def PauseUntilMotorStalled(motorPort, timeOut=3000):
         rcu.SetWaitForTime(0.005) # Ожидание между измерениями
 
 
-def SyncChassisMovement(lenght: int, speed: int, retention=True):
+def SyncChassisMovement(lenght, speed, retention=True):
+    import solve_painter as main
     prev_time = 0
     while True: # Цикл синхронизации движения колеса к колесу
         curr_time = pyb.millis()
         dt = curr_time - prev_time
-        prev_time = pyb.millis()
-        elm = rcu.GetMotorCode(CHASSIS_LEFT_MOT_PORT)
-        erm = rcu.GetMotorCode(CHASSIS_RIGHT_MOT_PORT)
+        prev_time = curr_time
+        elm = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
+        erm = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)
         if (elm + erm) / 2 >= lenght:
             break
         error_left = erm - elm
         error_right = elm - erm
-        lm_speed = speed + error_left * SYNC_MOTORS_MOVE_KP
-        rm_speed = speed + error_right * SYNC_MOTORS_MOVE_KP
-        rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, lm_speed)
-        rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, rm_speed)
-        tools.PauseUntilTime(currTime, 5)
+        lm_speed = speed + error_left * main.SYNC_MOTORS_MOVE_KP
+        rm_speed = speed + error_right * main.SYNC_MOTORS_MOVE_KP
+        rcu.SetMotor(main.CHASSIS_LEFT_MOT_PORT, lm_speed)
+        rcu.SetMotor(main.CHASSIS_RIGHT_MOT_PORT, rm_speed)
+        tools.PauseUntilTime(curr_time, 5)
     
     # Удерживаем моторы, если нужно
-    if retention:
-        rcu.SetMotorServo(CHASSIS_LEFT_MOT_PORT, speed, 0)
-        rcu.SetMotorServo(CHASSIS_RIGHT_MOT_PORT, speed, 0)
-    else:
-        rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, 0)
-        rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, 0)
+    ChassisStop(retention)
 
 
 # Движение прямолинейно на значение энкодера
-def MotorStraightAngle(speed:int, angle:int, retention=True):
+def MotorStraightAngle(speed, angle, retention=True):
+    import solve_painter as main
+    MOT_ENC_ERR_TRESHOLD = 15 # Пороговое значение для определения, что моторы достигли точки
     # MOTOR_STRAIGHT_TIME_OUT = 1000
 
-    elm_angle = rcu.GetMotorCode(CHASSIS_LEFT_MOT_PORT) + angle # Значение энкодера левого мотора с нужным углом
-    erm_angle = rcu.GetMotorCode(CHASSIS_RIGHT_MOT_PORT) + angle # Значение энкодера правого мотора с нужным углом
-
-    MOT_ENC_ERR_TRESHOLD = 20 # Пороговое значение для определения, что моторы достигли точки
+    elm_angle = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT) + angle # Значение энкодера левого мотора с нужным углом
+    erm_angle = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT) + angle # Значение энкодера правого мотора с нужным углом
+    
     ELM_ANGL_LEFT_RANGE = elm_angle - MOT_ENC_ERR_TRESHOLD
     ELM_ANGL_RIGHT_RANGE = elm_angle + MOT_ENC_ERR_TRESHOLD
     ELM_ANGL_LEFT_RANGE = erm_angle - MOT_ENC_ERR_TRESHOLD
     ELM_ANGL_RIGHT_RANGE = erm_angle + MOT_ENC_ERR_TRESHOLD
 
-    rcu.SetMotorStraightAngle(CHASSIS_LEFT_MOT_PORT, CHASSIS_RIGHT_MOT_PORT, speed, angle) # Запустить моторы на нужный тик энкодера
+    rcu.SetMotorStraightAngle(main.CHASSIS_LEFT_MOT_PORT, main.CHASSIS_RIGHT_MOT_PORT, speed, angle) # Запустить моторы на нужный тик энкодера
 
     # Ждём достижения проезда
-    startTime = pyb.millis()
+    start_time = pyb.millis()
     while True:
-        # if pyb.millis() - startTime >= MOTOR_STRAIGHT_TIME_OUT:
+        # if pyb.millis() - start_time >= MOTOR_STRAIGHT_TIME_OUT:
         #     break
-        elm = rcu.GetMotorCode(CHASSIS_LEFT_MOT_PORT)
-        erm = rcu.GetMotorCode(CHASSIS_RIGHT_MOT_PORT)
+        elm = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
+        erm = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)
         if ELM_ANGL_LEFT_RANGE <= elm <= ELM_ANGL_RIGHT_RANGE and ELM_ANGL_LEFT_RANGE <= erm <= ELM_ANGL_RIGHT_RANGE:
             break
         rcu.SetWaitForTime(0.005)
 
     # Удерживаем моторы, если нужно
-    if retention:
-        rcu.SetMotorServo(port_left_motor, speed, 0)
-        rcu.SetMotorServo(port_right_motor, speed, 0)
-    else:
-        rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, 0)
-        rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, 0)
+    ChassisStop(retention)
 
 
 # Движение на расстояние в мм
-def DistMove(dist: int, speed: int, retention=True):
-    calc_mot_rotate = (dist / (math.pi * WHEELS_D)) * MOT_ENC_RESOLUTION  # Расчёт угла поворота на дистанцию
+def DistMove(dist, speed, retention=True):
+    import solve_painter as main
+    calc_mot_rotate = (dist / (math.pi * main.WHEELS_D)) * main.MOT_ENC_RESOLUTION  # Расчёт угла поворота на дистанцию
+    MotorStraightAngle(speed, calc_mot_rotate, retention)
 
 
 # Поворот относительно центра на угол
-def SpinTurn(deg: float, speed: int):
-    calc_mot_rotate = ((deg * WHEELS_W) / WHEELS_D) * (MOT_ENC_RESOLUTION / 360)  # Расчитать градусы для поворота в градусы для мотора
-    rcu.SetCarTurn(CHASSIS_LEFT_MOT_PORT, CHASSIS_RIGHT_MOT_PORT, speed, calc_mot_rotate)
+def SpinTurn(deg, speed):
+    import solve_painter as main 
+    calc_mot_rotate = ((deg * main.WHEELS_W) / main.WHEELS_D) * (main.MOT_ENC_RESOLUTION / 360)  # Расчитать градусы для поворота в градусы для мотора
+    rcu.SetCarTurn(main.CHASSIS_LEFT_MOT_PORT, main.CHASSIS_RIGHT_MOT_PORT, speed, calc_mot_rotate)
 
 
 # Остановка моторов шасси
-def ChassisStop(retention: bool):
+def ChassisStop(retention, maxSpeed=50):
+    import solve_painter as main
     # Удерживаем моторы, если нужно
     if retention:
-        rcu.SetMotorServo(CHASSIS_LEFT_MOT_PORT, maxSpeed, 0)
-        rcu.SetMotorServo(CHASSIS_RIGHT_MOT_PORT, maxSpeed, 0)
+        rcu.SetMotorServo(main.CHASSIS_LEFT_MOT_PORT, maxSpeed, 0)
+        rcu.SetMotorServo(main.CHASSIS_RIGHT_MOT_PORT, maxSpeed, 0)
     else:
-        rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, 0)
-        rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, 0)
+        rcu.SetMotor(main.CHASSIS_LEFT_MOT_PORT, 0)
+        rcu.SetMotor(main.CHASSIS_RIGHT_MOT_PORT, 0)

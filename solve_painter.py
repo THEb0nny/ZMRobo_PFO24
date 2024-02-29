@@ -1,6 +1,7 @@
 import _thread as thread
 import rcu
 import pyb
+import math
 import mymath
 import tools
 import motors
@@ -42,7 +43,7 @@ WHITE_REF_RAW_R_LS = 3048
 
 ### Другое
 WHEELS_D = 56  # Диаметр колёс
-WHEELS_W = 130  # Расстояние между центрами колёс (колея)
+WHEELS_W = 160  # Расстояние между центрами колёс (колея)
 
 MOT_ENC_RESOLUTION = 780  # Разрешение энкодеров на оборот
 
@@ -101,7 +102,7 @@ def LineFollowToIntersaction(speed, retention=True, debug=False):
     while True:
         curr_time = pyb.millis()
         dt = curr_time - prev_time
-        prev_time = pyb.millis()
+        prev_time = curr_time
         lrrls = rcu.GetLightSensor(LEFT_LIGHT_SEN_PORT)  # Считать данные с датчика отражения 1 порта
         rrrls = rcu.GetLightSensor(RIGHT_LIGHT_SEN_PORT)  # Считать данные с датчика отражения 4 порта
         lrls = tools.GetNormRefLineSensor(lrrls, BLACK_REF_RAW_L_LS, WHITE_REF_RAW_L_LS)
@@ -130,7 +131,7 @@ def LineFollowToIntersaction(speed, retention=True, debug=False):
             rcu.SetLCDFilledRectangle2(35, 120, 60, 15, 0x0000)
             rcu.SetDisplayStringXY(1, 120, "dt: " + str(dt), 0xFFE0, 0x0000, 0)
 
-        tools.PauseUntilTime(currTime, 5)
+        tools.PauseUntilTime(curr_time, 5)
 
     motors.ChassisStop(retention)  # Команда остановки моторов шасси
 
@@ -151,7 +152,7 @@ def LineFollowToDist(dist, speed, retention=True, debug=False):
     while True:
         curr_time = pyb.millis()
         dt = curr_time - prev_time
-        prev_time = pyb.millis()
+        prev_time = curr_time
         lrrls = rcu.GetLightSensor(LEFT_LIGHT_SEN_PORT)  # Считать данные с датчика отражения 1 порта
         rrrls = rcu.GetLightSensor(RIGHT_LIGHT_SEN_PORT)  # Считать данные с датчика отражения 4 порта
         lrls = tools.GetNormRefLineSensor(lrrls, BLACK_REF_RAW_L_LS, WHITE_REF_RAW_L_LS)
@@ -182,7 +183,7 @@ def LineFollowToDist(dist, speed, retention=True, debug=False):
             rcu.SetLCDFilledRectangle2(35, 120, 60, 15, 0x0000)
             rcu.SetDisplayStringXY(1, 120, "dt: " + str(dt), 0xFFE0, 0x0000, 0)
 
-        tools.PauseUntilTime(currTime, 5)
+        tools.PauseUntilTime(curr_time, 5)
 
     motors.ChassisStop(retention)  # Команда остановки моторов шасси
 
@@ -203,7 +204,7 @@ def LineAlignment(maxSpeed=50, alignmentTime=1000, lineIsForward=True, retention
     while pyb.millis() - start_time < timeOut:
         curr_time = pyb.millis()
         dt = curr_time - prev_time
-        prev_time = pyb.millis()
+        prev_time = curr_time
         lrrls = rcu.GetLightSensor(LEFT_LIGHT_SEN_PORT)  # Считать данные с датчика отражения 1 порта
         rrrls = rcu.GetLightSensor(RIGHT_LIGHT_SEN_PORT)  # Считать данные с датчика отражения 4 порта
         lrls = tools.GetNormRefLineSensor(lrrls, BLACK_REF_RAW_L_LS, WHITE_REF_RAW_L_LS)
@@ -237,7 +238,7 @@ def LineAlignment(maxSpeed=50, alignmentTime=1000, lineIsForward=True, retention
             rcu.SetLCDFilledRectangle2(35, 120, 60, 15, 0x0000)
             rcu.SetDisplayStringXY(1, 120, "dt: " + str(dt), 0xFFE0, 0x0000, 0)
 
-        tools.PauseUntilTime(currTime, 5)
+        tools.PauseUntilTime(curr_time, 5)
 
     motors.ChassisStop(retention)  # Команда остановки моторов шасси
 
@@ -259,7 +260,7 @@ def WallAlignment(distanceToWall, maxSpeed=50, regulationTime=1000, retention=Tr
     while pyb.millis() - start_time < timeOut:
         curr_time = pyb.millis()
         dt = curr_time - prev_time
-        prev_time = pyb.millis()
+        prev_time = curr_time
         lls = rcu.GetLaserDist(LEFT_LASER_SEN_PORT, 0)
         rls = rcu.GetLaserDist(RIGHT_LASER_SEN_PORT, 0)
         error_l = lls - distanceToWall
@@ -286,7 +287,7 @@ def WallAlignment(distanceToWall, maxSpeed=50, regulationTime=1000, retention=Tr
             rcu.SetLCDFilledRectangle2(35, 40, 60, 15, 0x0000)
             rcu.SetDisplayStringXY(1, 40, "dt: " + str(dt), 0xFFE0, 0x0000, 0)
 
-        tools.PauseUntilTime(currTime, 5)
+        tools.PauseUntilTime(curr_time, 5)
 
     motors.ChassisStop(retention)  # Команда остановки моторов шасси
 
@@ -340,10 +341,6 @@ def Solve():
     # rcu.SetWaitForTime(0.1)
     # rcu.Set3CLed(LED_PORT, 0) # Сигнал на лампу, что завершили
 
-    ### Вращение мотора в режиме сервопривода вверх
-    rcu.SetMotorServo(PEN_MANIP_MOTOR_PORT, -50, 105)
-    rcu.SetWaitForAngle(PEN_MANIP_MOTOR_PORT, -50, 105)
-
     ### Выравнивание у стороны куба
     WallAlignment(DIST_TO_CUBE_SIDE, 40, regulationTime=3000, debug=False)
     rcu.Set3CLed(LED_PORT, 3)  # Сигнал на лампу, что завершили
@@ -368,8 +365,9 @@ def Solve():
 # Главная функция
 def Main():
     # LineAlignment(40, 3000, True)
-    # Solve()
-    SpinTurn(90, 30)
+    #Solve()
+    #motors.SpinTurn(90, 50)
+    motors.DistMove(450, 50)
     # thread.start_new_thread(tools.Telemetry,())
     # thread.start_new_thread(Solve,())
 

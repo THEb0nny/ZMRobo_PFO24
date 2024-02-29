@@ -1,6 +1,7 @@
 import rcu
 import pyb
 import mymath
+import tools
 
 
 def PauseUntilTime(startTime, ms):
@@ -12,7 +13,7 @@ def PauseUntilTime(startTime, ms):
 
 
 def GetNormRefLineSensor(refRawVal, bRefRawVal, wRefRawValCS):
-    refValue = mymath.map(lrrls, bRefRawVal, wRefRawValCS, 0, 100)
+    refValue = mymath.map(refRawVal, bRefRawVal, wRefRawValCS, 0, 100)
     refValue = mymath.constrain(refValue, 0, 100)
     return refValue
 
@@ -20,11 +21,14 @@ def GetNormRefLineSensor(refRawVal, bRefRawVal, wRefRawValCS):
 # Функция для печати значений на экран
 def Telemetry():
     global BLACK_REF_RAW_L_LS, WHITE_REF_RAW_L_LS, BLACK_REF_RAW_R_LS, WHITE_REF_RAW_R_LS
-    prevTime = 0
+    global LEFT_LIGHT_SEN_PORT, RIGHT_LIGHT_SEN_PORT
+    global LEFT_LASER_SEN_PORT, RIGHT_LASER_SEN_PORT
+    global CHASSIS_LEFT_MOT_PORT, CHASSIS_RIGHT_MOT_PORT, PEN_MANIP_LINEAR_MOTOR_PORT
+    prev_time = 0
     while True:
-        currTime = pyb.millis()
-        dt = currTime - prevTime
-        prevTime = pyb.millis()
+        curr_time = pyb.millis()
+        dt = curr_time - prev_time
+        prev_time = pyb.millis()
         lrrls = rcu.GetLightSensor(LEFT_LIGHT_SEN_PORT) # Считать данные с датчика отражения 1 порта
         rrrls = rcu.GetLightSensor(RIGHT_LIGHT_SEN_PORT) # Считать данные с датчика отражения 4 порта
         lrls = mymath.map(lrrls, BLACK_REF_RAW_L_LS, WHITE_REF_RAW_L_LS, 0, 100)
