@@ -1,7 +1,6 @@
 import rcu
 import pyb
 import mymath
-import tools
 
 
 def PauseUntilTime(startTime, ms):

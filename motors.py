@@ -1,13 +1,19 @@
+import pid
 import rcu
 import pyb
 import tools
 import math
+import mymath
+import adv_mot_ctrls as adv
+import set_var as main
 
+
+# Пауза до определения стопора мотора
 def PauseUntilMotorStalled(motorPort, timeOut=3000):
     stall = 0
     enc_previous = rcu.GetMotorCode(motorPort)
     start_time = pyb.millis()
-    rcu.SetWaitForTime(0.050) # Время после которого начинаем проверять
+    rcu.SetWaitForTime(0.050) # Время после которого начинаем проверять, для того, чтобы мотор успел стартануть
     while pyb.millis() - start_time < timeOut:
         enc_current = rcu.GetMotorCode(motorPort)
         if abs(enc_current - enc_previous) < 1:
@@ -20,77 +26,149 @@ def PauseUntilMotorStalled(motorPort, timeOut=3000):
         rcu.SetWaitForTime(0.005) # Ожидание между измерениями
 
 
-def SyncChassisMovement(lenght, speed, retention=True):
-    import solve_painter as main
+def SyncAccelerate(minPwr, maxPwr, accelDist, decelDist, totalDist, retention=True):
+    adv.AccTwoEncConfig(minPwr, maxPwr, accelDist, decelDist, totalDist)
+
+    pid_acc = pid.PIDController()
+    pid_acc.setGrains(main.SYNC_MOTORS_KP, 0, main.SYNC_MOTORS_KD)
+    pid_acc.setControlSaturation(-100, 100)
+    pid_acc.reset()
+
     prev_time = 0
-    while True: # Цикл синхронизации движения колеса к колесу
+    while True:
         curr_time = pyb.millis()
         dt = curr_time - prev_time
         prev_time = curr_time
+
         elm = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
         erm = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)
-        if (elm + erm) / 2 >= lenght:
+        pwrOut, done = adv.AccTwoEnc(elm, erm)
+
+        if done:
             break
-        error_left = erm - elm
-        error_right = elm - erm
-        lm_speed = speed + error_left * main.SYNC_MOTORS_MOVE_KP
-        rm_speed = speed + error_right * main.SYNC_MOTORS_MOVE_KP
-        rcu.SetMotor(main.CHASSIS_LEFT_MOT_PORT, lm_speed)
-        rcu.SetMotor(main.CHASSIS_RIGHT_MOT_PORT, rm_speed)
+
+        error = adv.GetErrorSyncMotorsInPwr(elm, erm, pwrOut, pwrOut)
+        pid_acc.setPoint(error)
+        U = pid_acc.compute(dt, 0)
+        pwr_left, pwr_right = adv.GetPwrSyncMotorsInPwr(U, pwrOut, pwrOut)
+
+        rcu.SetMotor(main.CHASSIS_LEFT_MOT_PORT, pwr_left)
+        rcu.SetMotor(main.CHASSIS_RIGHT_MOT_PORT, pwr_right)
         tools.PauseUntilTime(curr_time, 5)
-    
-    # Удерживаем моторы, если нужно
+
     ChassisStop(retention)
 
 
-# Движение прямолинейно на значение энкодера
-def MotorStraightAngle(speed, angle, retention=True):
-    import solve_painter as main
-    MOT_ENC_ERR_TRESHOLD = 15 # Пороговое значение для определения, что моторы достигли точки
-    # MOTOR_STRAIGHT_TIME_OUT = 1000
+# Синхронизированное движение с установленными скоростями
+def SyncChassisMovement(speedL, speedR, impulse, retention=True):
+    adv.SyncMotorsConfig(speedL, speedR)
 
-    elm_angle = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT) + angle # Значение энкодера левого мотора с нужным углом
-    erm_angle = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT) + angle # Значение энкодера правого мотора с нужным углом
-    
-    ELM_ANGL_LEFT_RANGE = elm_angle - MOT_ENC_ERR_TRESHOLD
-    ELM_ANGL_RIGHT_RANGE = elm_angle + MOT_ENC_ERR_TRESHOLD
-    ELM_ANGL_LEFT_RANGE = erm_angle - MOT_ENC_ERR_TRESHOLD
-    ELM_ANGL_RIGHT_RANGE = erm_angle + MOT_ENC_ERR_TRESHOLD
+    pid_sync = pid.PIDController()
+    pid_sync.setGrains(main.SYNC_MOTORS_KP, 0, main.SYNC_MOTORS_KD)
+    pid_sync.setControlSaturation(-100, 100)
+    pid_sync.reset()
 
-    rcu.SetMotorStraightAngle(main.CHASSIS_LEFT_MOT_PORT, main.CHASSIS_RIGHT_MOT_PORT, speed, angle) # Запустить моторы на нужный тик энкодера
+    elm_prev = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
+    erm_prev = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)
 
-    # Ждём достижения проезда
-    start_time = pyb.millis()
+    prev_time = pyb.millis()
     while True:
-        # if pyb.millis() - start_time >= MOTOR_STRAIGHT_TIME_OUT:
-        #     break
+        curr_time = pyb.millis()
+        dt = curr_time - prev_time
+        prev_time = curr_time
+
         elm = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
         erm = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)
-        if ELM_ANGL_LEFT_RANGE <= elm <= ELM_ANGL_RIGHT_RANGE and ELM_ANGL_LEFT_RANGE <= erm <= ELM_ANGL_RIGHT_RANGE:
-            break
-        rcu.SetWaitForTime(0.005)
 
-    # Удерживаем моторы, если нужно
+        # if impulse - main.MOT_ENC_THRESHOLD <= (elm + erm) / 2 <= impulse + main.MOT_ENC_THRESHOLD:
+        #     break
+        if impulse - main.MOT_ENC_THRESHOLD <= (elm - elm_prev + erm - erm_prev) / 2:
+            break
+
+        error = adv.GetErrorSyncMotors(elm, erm)
+        pid_sync.setPoint(error)
+        U = pid_sync.compute(dt, 0)
+        lm_speed, rm_speed = adv.GetPwrSyncMotors(U)
+        rcu.SetMotor(main.CHASSIS_LEFT_MOT_PORT, lm_speed)
+        rcu.SetMotor(main.CHASSIS_RIGHT_MOT_PORT, rm_speed)
+
+        tools.PauseUntilTime(curr_time, 5)
+
+    ChassisStop(retention)
+
+    rcu.Set3CLed(main.LED_PORT, 1)  # Сигнал на лампу, что завершили
+    rcu.SetWaitForTime(0.1)
+    rcu.Set3CLed(main.LED_PORT, 0)
+
+
+def SyncChassisTurn(speed, angle, retention=True, debug=False):
+    if impulse < 0:
+        adv.SyncMotorsConfig(-speed, speed)
+    elif impulse > 0:
+        adv.SyncMotorsConfig(speed, -speed)
+    else:
+        return
+
+    pid_sync = pid.PIDController()
+    pid_sync.setGrains(main.SYNC_MOTORS_KP, 0, main.SYNC_MOTORS_KD)
+    pid_sync.setControlSaturation(-100, 100)
+    pid_sync.reset()
+
+    angle_l = impulse + rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
+    angle_r = (impulse + rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)) * -1
+
+    prev_time = pyb.millis()
+    while True:
+        curr_time = pyb.millis()
+        dt = curr_time - prev_time
+        prev_time = curr_time
+
+        elm = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
+        erm = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)
+
+        error_l = angle_l - elm
+        error_r = angle_r - erm
+        error_set = 0 - (error_l - error_r)
+        error = adv.GetErrorSyncMotorsTurn(elm, erm, impulse)
+        pid_sync.setPoint(error)
+
+        if math.fabs(error_set) <= main.TURN_MOT_ENC_THRESHOLD:
+            break
+
+        U = pid_sync.compute(dt, 0)
+        lm_speed, rm_speed = adv.GetPwrSyncMotorsTurn(U, impulse)
+        lm_speed = mymath.constrain(lm_speed, -speed, speed)
+        rm_speed = mymath.constrain(rm_speed, -speed, speed)
+        rcu.SetMotor(main.CHASSIS_LEFT_MOT_PORT, lm_speed)
+        rcu.SetMotor(main.CHASSIS_RIGHT_MOT_PORT, rm_speed)
+
+        if debug:
+            rcu.SetLCDClear(0x0000)
+            rcu.SetDisplayStringXY(1, 1, "error_l: " + str(error_l), 0xFFE0, 0x0000, 0)
+            rcu.SetDisplayStringXY(1, 20, "error_r: " + str(error_r), 0xFFE0, 0x0000, 0)
+            rcu.SetDisplayStringXY(1, 40, "error_set: " + str(error_set), 0xFFE0, 0x0000, 0)
+            rcu.SetDisplayStringXY(1, 60, "U: " + str(U), 0xFFE0, 0x0000, 0)
+
+        tools.PauseUntilTime(curr_time, 5)
+
     ChassisStop(retention)
 
 
 # Движение на расстояние в мм
 def DistMove(dist, speed, retention=True):
-    import solve_painter as main
     calc_mot_rotate = (dist / (math.pi * main.WHEELS_D)) * main.MOT_ENC_RESOLUTION  # Расчёт угла поворота на дистанцию
-    MotorStraightAngle(speed, calc_mot_rotate, retention)
+    # MotorStraightAngle(speed, calc_mot_rotate, retention)
+    SyncChassisMovement(speed, speed, calc_mot_rotate)
 
 
 # Поворот относительно центра на угол
 def SpinTurn(deg, speed):
-    import solve_painter as main 
     calc_mot_rotate = ((deg * main.WHEELS_W) / main.WHEELS_D) * (main.MOT_ENC_RESOLUTION / 360)  # Расчитать градусы для поворота в градусы для мотора
-    rcu.SetCarTurn(main.CHASSIS_LEFT_MOT_PORT, main.CHASSIS_RIGHT_MOT_PORT, speed, calc_mot_rotate)
+    SyncChassisTurn(speed, calc_mot_rotate)
 
 
 # Остановка моторов шасси
 def ChassisStop(retention, maxSpeed=50):
-    import solve_painter as main
     # Удерживаем моторы, если нужно
     if retention:
         rcu.SetMotorServo(main.CHASSIS_LEFT_MOT_PORT, maxSpeed, 0)
