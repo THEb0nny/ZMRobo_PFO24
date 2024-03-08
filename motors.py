@@ -60,16 +60,16 @@ def SyncAccelerate(minPwr, maxPwr, accelDist, decelDist, totalDist, retention=Tr
 
 
 # Синхронизированное движение с установленными скоростями
-def SyncChassisMovement(speedL, speedR, impulse, retention=True):
+def SyncChassisMovement(speedL, speedR, tics, retention=True):
     adv.SyncMotorsConfig(speedL, speedR)
+
+    elm_prev = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
+    erm_prev = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)
 
     pid_sync = pid.PIDController()
     pid_sync.setGrains(main.SYNC_MOTORS_KP, 0, main.SYNC_MOTORS_KD)
     pid_sync.setControlSaturation(-100, 100)
     pid_sync.reset()
-
-    elm_prev = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
-    erm_prev = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)
 
     prev_time = pyb.millis()
     while True:
@@ -80,9 +80,9 @@ def SyncChassisMovement(speedL, speedR, impulse, retention=True):
         elm = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
         erm = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)
 
-        # if impulse - main.MOT_ENC_THRESHOLD <= (elm + erm) / 2 <= impulse + main.MOT_ENC_THRESHOLD:
+        # if tics - main.MOT_ENC_THRESHOLD <= (elm + erm) / 2 <= tics + main.MOT_ENC_THRESHOLD:
         #     break
-        if impulse - main.MOT_ENC_THRESHOLD <= (elm - elm_prev + erm - erm_prev) / 2:
+        if tics <= (elm - elm_prev + erm - erm_prev) / 2:
             break
 
         error = adv.GetErrorSyncMotors(elm, erm)
@@ -101,21 +101,24 @@ def SyncChassisMovement(speedL, speedR, impulse, retention=True):
     rcu.Set3CLed(main.LED_PORT, 0)
 
 
-def SyncChassisTurn(speed, angle, retention=True, debug=False):
-    if impulse < 0:
-        adv.SyncMotorsConfig(-speed, speed)
-    elif impulse > 0:
-        adv.SyncMotorsConfig(speed, -speed)
-    else:
+def SyncChassisTurn(speed, tics, retention=True, debug=False):
+    if tics == 0 or speed == 0:
+        ChassisStop(retention)
         return
+
+    elm_prev = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
+    erm_prev = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)
+    tics_elm = tics + rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
+    tics_erm = (tics + rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)) * -1
+    if tics < 0:
+        adv.SyncMotorsConfig(-speed, speed)
+    elif tics > 0:
+        adv.SyncMotorsConfig(speed, -speed)
 
     pid_sync = pid.PIDController()
     pid_sync.setGrains(main.SYNC_MOTORS_KP, 0, main.SYNC_MOTORS_KD)
     pid_sync.setControlSaturation(-100, 100)
     pid_sync.reset()
-
-    angle_l = impulse + rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
-    angle_r = (impulse + rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)) * -1
 
     prev_time = pyb.millis()
     while True:
@@ -126,17 +129,17 @@ def SyncChassisTurn(speed, angle, retention=True, debug=False):
         elm = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
         erm = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)
 
-        error_l = angle_l - elm
-        error_r = angle_r - erm
-        error_set = 0 - (error_l - error_r)
-        error = adv.GetErrorSyncMotorsTurn(elm, erm, impulse)
+        error_l = tics_elm - elm
+        error_r = tics_erm - erm
+        total_error = -(error_l - error_r)
+        error = adv.GetErrorSyncMotorsTurn(elm, erm, tics)
         pid_sync.setPoint(error)
 
-        if math.fabs(error_set) <= main.TURN_MOT_ENC_THRESHOLD:
+        if math.fabs(total_error) <= main.TURN_MOT_ENC_THRESHOLD:
             break
 
         U = pid_sync.compute(dt, 0)
-        lm_speed, rm_speed = adv.GetPwrSyncMotorsTurn(U, impulse)
+        lm_speed, rm_speed = adv.GetPwrSyncMotorsTurn(U, tics)
         lm_speed = mymath.constrain(lm_speed, -speed, speed)
         rm_speed = mymath.constrain(rm_speed, -speed, speed)
         rcu.SetMotor(main.CHASSIS_LEFT_MOT_PORT, lm_speed)
@@ -146,7 +149,7 @@ def SyncChassisTurn(speed, angle, retention=True, debug=False):
             rcu.SetLCDClear(0x0000)
             rcu.SetDisplayStringXY(1, 1, "error_l: " + str(error_l), 0xFFE0, 0x0000, 0)
             rcu.SetDisplayStringXY(1, 20, "error_r: " + str(error_r), 0xFFE0, 0x0000, 0)
-            rcu.SetDisplayStringXY(1, 40, "error_set: " + str(error_set), 0xFFE0, 0x0000, 0)
+            rcu.SetDisplayStringXY(1, 40, "total_error: " + str(total_error), 0xFFE0, 0x0000, 0)
             rcu.SetDisplayStringXY(1, 60, "U: " + str(U), 0xFFE0, 0x0000, 0)
 
         tools.PauseUntilTime(curr_time, 5)
