@@ -80,6 +80,54 @@ def LineFollowToIntersaction(speed, retention=True, debug=False):
     rcu.Set3CLed(LED_PORT, 0) # Сигнал на лампу, что завершили
 
 
+# Движение по линии на расстояние
+def LineFollowToDist(dist, speed, retention=True, debug=False):
+    elm_prev = rcu.GetMotorCode(CHASSIS_LEFT_MOT_PORT)  # Значение с левого энкодера изначально
+    erm_prev = rcu.GetMotorCode(CHASSIS_RIGHT_MOT_PORT)  # Значение с правого энкодера изначально
+    angle = (dist / (math.pi * WHEELS_D)) * MOT_ENC_RESOLUTION  # Расчёт угла поворота на дистанцию
+    # Сколько нужно пройти моторам включая накрученное до этого
+    lm_rotate = angle + elm_prev  # Считаем для левого мотора сколько в итоге нужно повернуться
+    rm_rotate = angle + erm_prev  # Считаем для правого мотора сколько в итоге нужно повернуться
+    
+    pid_line = pid.PIDController()
+    pid_line.setGrains(LW_2S_KP, 0, LW_2S_KD)
+    pid_line.setControlSaturation(-100, 100)
+    pid_line.reset()
+
+    prev_time = 0
+    while True:
+        curr_time = pyb.millis()
+        dt = curr_time - prev_time
+        prev_time = curr_time
+        lrrls = rcu.GetLightSensor(LEFT_LIGHT_SEN_PORT)  # Считать данные с датчика отражения 1 порта
+        rrrls = rcu.GetLightSensor(RIGHT_LIGHT_SEN_PORT)  # Считать данные с датчика отражения 4 порта
+        lrls = tools.GetNormRefLineSensor(lrrls, BLACK_REF_RAW_L_LS, WHITE_REF_RAW_L_LS)
+        rrls = tools.GetNormRefLineSensor(rrrls, BLACK_REF_RAW_R_LS, WHITE_REF_RAW_R_LS)
+        elm = rcu.GetMotorCode(CHASSIS_LEFT_MOT_PORT)
+        erm = rcu.GetMotorCode(CHASSIS_RIGHT_MOT_PORT)
+        if elm >= lm_rotate and\
+                erm >= rm_rotate:
+            break
+        error = lrls - rrls
+        pid_line.setPoint(error)
+        u = pid_line.compute(dt, 0)
+        pwr_left_mot = speed + u
+        pwr_right_mot = speed - u
+        rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, pwr_left_mot)
+        rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, pwr_right_mot)
+
+        if debug:
+            rcu.SetLCDClear(0x0000)
+            rcu.SetDisplayStringXY(1, 1, "lm_rotate: " + str(lm_rotate), 0xFFE0, 0x0000, 0)
+            rcu.SetDisplayStringXY(1, 20, "rm_rotate: " + str(rm_rotate), 0xFFE0, 0x0000, 0)
+            rcu.SetDisplayStringXY(1, 40, "elm: " + str(elm), 0xFFE0, 0x0000, 0)
+            rcu.SetDisplayStringXY(1, 60, "erm: " + str(erm), 0xFFE0, 0x0000, 0)
+
+        tools.PauseUntilTime(curr_time, 5)
+
+    motors.ChassisStop(retention)  # Команда остановки моторов шасси
+
+
 # Движение по линии до перекрёстка
 def LineFollowToRighIntersaction(speed, retention=True, debug=False):
     pid_line = pid.PIDController()
@@ -122,54 +170,6 @@ def LineFollowToRighIntersaction(speed, retention=True, debug=False):
     rcu.Set3CLed(LED_PORT, 1)  # Сигнал на лампу, что завершили
     rcu.SetWaitForTime(0.1)
     rcu.Set3CLed(LED_PORT, 0)  # Сигнал на лампу, что завершили
-
-
-# Движение по линии на расстояние
-def LineFollowToDist(dist, speed, retention=True, debug=False):
-    elm_prev = rcu.GetMotorCode(CHASSIS_LEFT_MOT_PORT)  # Значение с левого энкодера изначально
-    erm_prev = rcu.GetMotorCode(CHASSIS_RIGHT_MOT_PORT)  # Значение с правого энкодера изначально
-    angle = (dist / (math.pi * WHEELS_D)) * MOT_ENC_RESOLUTION  # Расчёт угла поворота на дистанцию
-    # Сколько нужно пройти моторам включая накрученное до этого
-    lm_rotate = angle + elm_prev  # Считаем для левого мотора сколько в итоге нужно повернуться
-    rm_rotate = angle + erm_prev  # Считаем для правого мотора сколько в итоге нужно повернуться
-    
-    pid_line = pid.PIDController()
-    pid_line.setGrains(LW_2KP, 0, LW_2KD)
-    pid_line.setControlSaturation(-100, 100)
-    pid_line.reset()
-
-    prev_time = 0
-    while True:
-        curr_time = pyb.millis()
-        dt = curr_time - prev_time
-        prev_time = curr_time
-        lrrls = rcu.GetLightSensor(LEFT_LIGHT_SEN_PORT)  # Считать данные с датчика отражения 1 порта
-        rrrls = rcu.GetLightSensor(RIGHT_LIGHT_SEN_PORT)  # Считать данные с датчика отражения 4 порта
-        lrls = tools.GetNormRefLineSensor(lrrls, BLACK_REF_RAW_L_LS, WHITE_REF_RAW_L_LS)
-        rrls = tools.GetNormRefLineSensor(rrrls, BLACK_REF_RAW_R_LS, WHITE_REF_RAW_R_LS)
-        elm = rcu.GetMotorCode(CHASSIS_LEFT_MOT_PORT)
-        erm = rcu.GetMotorCode(CHASSIS_RIGHT_MOT_PORT)
-        if elm >= lm_rotate and\
-                erm >= rm_rotate:
-            break
-        error = lrls - rrls
-        pid_line.setPoint(error)
-        u = pid_line.compute(dt, 0)
-        pwr_left_mot = speed + u
-        pwr_right_mot = speed - u
-        rcu.SetMotor(CHASSIS_LEFT_MOT_PORT, pwr_left_mot)
-        rcu.SetMotor(CHASSIS_RIGHT_MOT_PORT, pwr_right_mot)
-
-        if debug:
-            rcu.SetLCDClear(0x0000)
-            rcu.SetDisplayStringXY(1, 1, "lm_rotate: " + str(lm_rotate), 0xFFE0, 0x0000, 0)
-            rcu.SetDisplayStringXY(1, 20, "rm_rotate: " + str(rm_rotate), 0xFFE0, 0x0000, 0)
-            rcu.SetDisplayStringXY(1, 40, "elm: " + str(elm), 0xFFE0, 0x0000, 0)
-            rcu.SetDisplayStringXY(1, 60, "erm: " + str(erm), 0xFFE0, 0x0000, 0)
-
-        tools.PauseUntilTime(curr_time, 5)
-
-    motors.ChassisStop(retention)  # Команда остановки моторов шасси
 
 
 # Выравнивание на линии перпендикулярно
