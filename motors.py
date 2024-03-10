@@ -77,12 +77,12 @@ def SyncChassisMovement(speedL, speedR, tics, retention=True):
         dt = curr_time - prev_time
         prev_time = curr_time
 
-        elm = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
-        erm = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)
+        elm = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT) - elm_prev
+        erm = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT) - erm_prev
 
         # if tics - main.MOT_ENC_THRESHOLD <= (elm + erm) / 2 <= tics + main.MOT_ENC_THRESHOLD:
         #     break
-        if tics <= (elm - elm_prev + erm - erm_prev) / 2:
+        if tics <= (elm + erm) / 2:
             break
 
         error = adv.GetErrorSyncMotors(elm, erm)
@@ -108,8 +108,6 @@ def SyncChassisTurn(speed, tics, retention=True, debug=False):
 
     elm_prev = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
     erm_prev = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)
-    tics_elm = tics + rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
-    tics_erm = (tics + rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)) * -1
     if tics < 0:
         adv.SyncMotorsConfig(-speed, speed)
     elif tics > 0:
@@ -126,11 +124,11 @@ def SyncChassisTurn(speed, tics, retention=True, debug=False):
         dt = curr_time - prev_time
         prev_time = curr_time
 
-        elm = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
-        erm = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)
+        elm = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT) - elm_prev
+        erm = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT) - erm_prev
 
-        error_l = tics_elm - elm
-        error_r = tics_erm - erm
+        error_l = tics - elm
+        error_r = tics * -1 - erm
         total_error = -(error_l - error_r)
         error = adv.GetErrorSyncMotorsTurn(elm, erm, tics)
         pid_sync.setPoint(error)
