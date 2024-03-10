@@ -108,10 +108,11 @@ def SyncChassisTurn(speed, tics, retention=True, debug=False):
 
     elm_prev = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT)
     erm_prev = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT)
-    if tics < 0:
-        adv.SyncMotorsConfig(-speed, speed)
-    elif tics > 0:
+    
+    if tics > 0:
         adv.SyncMotorsConfig(speed, -speed)
+    elif tics < 0:
+        adv.SyncMotorsConfig(-speed, speed)
 
     pid_sync = pid.PIDController()
     pid_sync.setGrains(main.SYNC_MOTORS_KP, 0, main.SYNC_MOTORS_KD)
@@ -127,32 +128,34 @@ def SyncChassisTurn(speed, tics, retention=True, debug=False):
         elm = rcu.GetMotorCode(main.CHASSIS_LEFT_MOT_PORT) - elm_prev
         erm = rcu.GetMotorCode(main.CHASSIS_RIGHT_MOT_PORT) - erm_prev
 
-        error_l = tics - elm
-        error_r = tics * -1 - erm
-        total_error = -(error_l - error_r)
-        error = adv.GetErrorSyncMotorsTurn(elm, erm, tics)
-        pid_sync.setPoint(error)
-
-        if math.fabs(total_error) <= main.TURN_MOT_ENC_THRESHOLD:
+        if (math.fabs(elm) + math.fabs(erm)) / 2 >= math.fabs(tics):
             break
 
+        error = adv.GetErrorSyncMotors(elm, erm)
+        pid_sync.setPoint(error)
+
         U = pid_sync.compute(dt, 0)
-        lm_speed, rm_speed = adv.GetPwrSyncMotorsTurn(U, tics)
-        lm_speed = mymath.constrain(lm_speed, -speed, speed)
-        rm_speed = mymath.constrain(rm_speed, -speed, speed)
+        lm_speed, rm_speed = adv.GetPwrSyncMotors(U)
         rcu.SetMotor(main.CHASSIS_LEFT_MOT_PORT, lm_speed)
         rcu.SetMotor(main.CHASSIS_RIGHT_MOT_PORT, rm_speed)
 
         if debug:
             rcu.SetLCDClear(0x0000)
-            rcu.SetDisplayStringXY(1, 1, "error_l: " + str(error_l), 0xFFE0, 0x0000, 0)
-            rcu.SetDisplayStringXY(1, 20, "error_r: " + str(error_r), 0xFFE0, 0x0000, 0)
-            rcu.SetDisplayStringXY(1, 40, "total_error: " + str(total_error), 0xFFE0, 0x0000, 0)
+            rcu.SetDisplayStringXY(1, 1, "tics: " + str(tics), 0xFFE0, 0x0000, 0)
+            rcu.SetDisplayStringXY(1, 20, "elm: " + str(elm), 0xFFE0, 0x0000, 0)
+            rcu.SetDisplayStringXY(1, 40, "erm: " + str(erm), 0xFFE0, 0x0000, 0)
             rcu.SetDisplayStringXY(1, 60, "U: " + str(U), 0xFFE0, 0x0000, 0)
 
         tools.PauseUntilTime(curr_time, 5)
 
     ChassisStop(retention)
+
+    if debug:
+        rcu.SetLCDClear(0x0000)
+        rcu.SetDisplayStringXY(1, 1, "tics: " + str(tics), 0xFFE0, 0x0000, 0)
+        rcu.SetDisplayStringXY(1, 20, "elm: " + str(elm), 0xFFE0, 0x0000, 0)
+        rcu.SetDisplayStringXY(1, 40, "erm: " + str(erm), 0xFFE0, 0x0000, 0)
+        rcu.SetDisplayStringXY(1, 60, "U: " + str(U), 0xFFE0, 0x0000, 0)
 
 
 # Движение на расстояние в мм
@@ -165,7 +168,7 @@ def DistMove(dist, speed, retention=True):
 # Поворот относительно центра на угол
 def SpinTurn(deg, speed):
     calc_mot_rotate = ((deg * main.WHEELS_W) / main.WHEELS_D) * (main.MOT_ENC_RESOLUTION / 360)  # Расчитать градусы для поворота в градусы для мотора
-    SyncChassisTurn(speed, calc_mot_rotate)
+    SyncChassisTurn(speed, calc_mot_rotate, True)
 
 
 # Остановка моторов шасси

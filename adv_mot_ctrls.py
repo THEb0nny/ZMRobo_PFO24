@@ -17,24 +17,9 @@ def SyncMotorsConfig(vLeft, vRight):
 def GetErrorSyncMotors(eLeft, eRight):
     return (syncVRight * eLeft) - (syncVLeft * eRight)
 
-def GetErrorSyncMotorsTurn(eLeft, eRight, angle):
-    if angle > 0:
-        return (syncVRight * eLeft) - (-syncVLeft * eRight)
-    else:
-        return (syncVRight * eLeft) - (syncVLeft * eRight)
-
 def GetPwrSyncMotors(U):
     pwr_left = syncVLeft - syncVRightSign * U
     pwr_right = syncVRight + syncVLeftSign * U
-    return pwr_left, pwr_right
-
-def GetPwrSyncMotorsTurn(U, angle):
-    if angle > 0:
-        pwr_left = syncVLeft + syncVRightSign * U
-        pwr_right = syncVRight + syncVLeftSign * U
-    else:
-        pwr_left = syncVLeft - syncVRightSign * U
-        pwr_right = syncVRight - syncVLeftSign * U
     return pwr_left, pwr_right
 
 def GetErrorSyncMotorsInPwr(eLeft, eRight, vLeft, vRight):

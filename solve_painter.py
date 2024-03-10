@@ -42,7 +42,7 @@ def ReadBarCode():
 # Движение по линии до перекрёстка
 def LineFollowToIntersaction(speed, retention=True, debug=False):
     pid_line = pid.PIDController()
-    pid_line.setGrains(LW_2_KP, 0, LW_2S_KD)
+    pid_line.setGrains(LW_2S_KP, 0, LW_2S_KD)
     pid_line.setControlSaturation(-100, 100)
     pid_line.reset()
 
@@ -345,7 +345,6 @@ def Solve():
     # result = ConvBinary2DecimalCode(barcode_bin_array) # Узнаём и записываем в переменную число от штрихкода
 
 def CalibrateLineSensor(start_t):
-    cur_t = pyb.millis()
     lrrls = rcu.GetLightSensor(LEFT_LIGHT_SEN_PORT)  # Считать данные с датчика отражения 1 порта
     rrrls = rcu.GetLightSensor(RIGHT_LIGHT_SEN_PORT)  # Считать данные с датчика отражения 4 порта
     lrls = tools.GetNormRefLineSensor(lrrls, BLACK_REF_RAW_L_LS, WHITE_REF_RAW_L_LS)
@@ -353,7 +352,6 @@ def CalibrateLineSensor(start_t):
     rcu.SetLCDClear(0x0000)
     rcu.SetDisplayStringXY(1, 1, "lrls: " + str(lrls), 0xFFE0, 0x0000, 0)
     rcu.SetDisplayStringXY(1, 20, "rrls: " + str(rrls), 0xFFE0, 0x0000, 0)
-    rcu.SetDisplayStringXY(1, 40, "gray: " + str((lrls+rrls)/2), 0xFFE0, 0x0000, 0)
     rcu.SetDisplayStringXY(150, 1, "lrrls: " + str(lrrls), 0xFFE0, 0x0000, 0)
     rcu.SetDisplayStringXY(150, 20, "rrrls: " + str(rrrls), 0xFFE0, 0x0000, 0)
     time.sleep(0.01)
@@ -403,7 +401,7 @@ def Main():
     # thread.start_new_thread(Solve,())
     start_t = pyb.millis()
     while True:
-        CalibrateLineSensor(start_t)
+        # CalibrateLineSensor(start_t)
         pass
 
 
